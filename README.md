@@ -1,103 +1,158 @@
 # OrderReady
 
-OrderReady is a planned intake assistant for a solo custom T-shirt printing founder. The founder receives informal customer messages and must turn incomplete or conflicting details into a usable intake ticket without inventing information. Reconstructing garment colors, size quantities, and deadlines is the operational bottleneck.
+**Chatathon 2026 — Track 01, Misneach.**
 
-The project is intended for Chatathon 2026 in the Misneach track.
+Turns a messy customer inquiry into a checked intake ticket, without inventing a single detail the customer didn't give.
 
-## Prototype status
+---
 
-[Certain] Repository inspection found only this README and Git metadata. The working prototype has not yet been implemented.
+## The founder and the bottleneck
 
-| Essential capability | Implemented code | Runtime verified | Mocked behavior | Planned work |
-| --- | --- | --- | --- | --- |
-| Extract inquiry into an editable form | None | No | None | Propose supplied values and leave uncertainties unresolved |
-| Validate required fields and quantities | None | No | None | Check missing fields and quantity inconsistencies deterministically |
-| Export a reviewed intake ticket | None | No | None | Allow export only after human review and successful validation |
+**Founder:** Maya, sole operator of a one-person custom T-shirt printing shop. She prints, packs, invoices, and answers every inquiry herself.
 
-## Planned workflow and scope
+**Bottleneck:** Orders arrive as Instagram DMs, texts, and emails — almost never with the details needed to quote. "We need about 40 shirts, mostly mediums, by the 15th" is a typical message. Maya's first reply is always the same set of questions, and the job stalls until the customer answers. A printer quoting without quantity, size split, and a firm date is guessing.
 
-Paste inquiry → extract supplied details → review missing or conflicting information → founder corrects or confirms → export checked intake ticket.
+OrderReady is the hire that reads the message and tells her exactly what's missing.
 
-The MVP is limited to one shirt style, sizes S/M/L, and one print location. The fixed shirt style and print location have not been configured. Their values must be explicitly configured, never invented.
+---
 
-The intake fields are color, requested total, size quantities for S/M/L, and requested deadline. The review screen should retain the original inquiry alongside editable proposed values, missing-field notices, and quantity discrepancies. Omitted values must remain unresolved rather than becoming defaults.
+## What it does
 
-Deterministic validation should compare the requested total with the sum of size quantities. Missing required information, ambiguous deadlines, and unresolved contradictions must prevent completed status and export. Every founder edit must trigger validation again before completion is possible.
+```
+paste inquiry → extract only what's stated (with the words it came from)
+              → surface every gap as a question
+              → Maya corrects or confirms
+              → totals and dates revalidated
+              → export intake ticket
+```
 
-The planned output is an inspectable intake ticket containing the reviewed fields, requested total, size breakdown, computed size total, and requested deadline. It is not a quote, a production-ready order, or a promise that the deadline can be met.
+**Collected from the customer:** name, contact (email or phone), S/M/L quantities, deadline, and any total the customer stated.
 
-Pricing, artwork review, inventory, payments, messaging integrations, automatic customer outreach, and production management are excluded.
+**Configured by the shop, never extracted:** garment, print location, lead time. These are constants at the top of `order_logic.py`. They are explicitly configured values — the app does not infer them from an inquiry.
 
-## AI and deterministic code
+---
 
-AI is intended to interpret messy language and propose structured field values. Missing or ambiguous details must remain unresolved. A model response is a proposal, not the authority on completeness.
+## The hard part
 
-Deterministic code must own required-field validation, quantity arithmetic, readiness state, and export eligibility. The founder must review the proposed fields, and human edits must pass validation before export.
+**The model is never trusted to be right — only to point at where it got something.**
 
-No provider, model, or AI configuration exists in the repository. Manual entry as a fallback is also unimplemented. If added later, it must be labeled manual mode when model access fails. Hardcoded or replayed responses must be identified as simulated output, never live model output.
+Every extracted value must carry an exact substring from the inquiry as evidence. Code then checks that the substring actually appears in the source text and drops any value that fails. A confident hallucination can't survive the check, because it has nothing to cite.
 
-## Local setup
+That's why the app asks instead of guessing:
 
-There is no runnable application or selected implementation stack in the repository.
+| Inquiry says | System does |
+|---|---|
+| "mostly mediums" | No size split. Asks for the breakdown. |
+| "about 40 shirts" | No count. Asks for the exact number. |
+| "by the 15th" | No deadline. Asks which month. |
+| "September 28" | No year. Asks. **Never infers the year from today's date.** |
 
-| Setup item | Current repository evidence |
-| --- | --- |
-| Prerequisites | No application runtime or dependency requirements declared |
-| Installation command | None defined, no dependency manifest |
-| Run command | None defined, no application entry point |
-| Required environment variables | None defined by application code or configuration |
-| Environment template | None present |
+A model response is a proposal, not a verdict on completeness. Omitted values stay unresolved; they never quietly become defaults.
 
-There are no application setup steps to run yet.
+**Silently changing "five large" to "ten large" to make the arithmetic work is a failure, not a fix.** When the numbers disagree, both are preserved and shown, and a human decides.
 
-## Planned demo
+Every rule that decides anything is deterministic Python in `order_logic.py`:
 
-Both inquiries below are synthetic. These walkthroughs have not been executed. No external service integration or simulated external behavior exists in the repository.
+- All required fields must be present before export unlocks.
+- Size counts must reconcile with any total the customer stated.
+- Deadlines must parse to a real date outside the configured lead time.
+- Every founder edit revalidates the whole ticket before completion is possible again.
 
-### Normal case
+---
 
-"Thirty navy shirts. Ten small, ten medium, ten large. Needed September 28, 2026."
+## Run it
 
-Once the fixed shirt style and print location are configured, extraction should propose navy, a requested total of 30, S/M/L quantities of 10/10/10, and September 28, 2026. The founder reviews the form. Validation should confirm that the size quantities sum to 30 and all required fields are resolved before permitting completed status and export.
+```bash
+pip install streamlit
+export ANTHROPIC_API_KEY=your-key
+streamlit run app.py
+```
 
-### Contradiction case
+Paste any case from `fixtures.py`, or your own text.
 
-"Thirty navy shirts. Ten small, ten medium, five large. Needed September 28."
+If the API times out, fails auth, or returns invalid JSON, the app shows **"Live AI unavailable — manual intake mode"** and keeps working: Maya types the fields and the same validation and export run. That mode is labelled as manual and is not live AI. No stored or replayed model response is ever presented as a live one.
 
-The requested total is 30, but the supplied size quantities sum to 25. The application should preserve both values, flag the discrepancy, and require a human decision. Silently changing five large to ten large is a failure.
+---
 
-The deadline also lacks a year. No date-resolution policy exists, so the year must remain unresolved until the founder clarifies it. The application must not infer a year from the hackathon or current date.
+## Demo
 
-For a synthetic correction, the founder could explicitly confirm a requested total of 25 and a deadline of September 28, 2026. The application should preserve S/M/L quantities of 10/10/5 and validate again. Completed status and export should become available only after all required information, configured scope, and human review pass the checks.
+Both inquiries are synthetic.
 
-## Validation and evidence
+**Normal case**
 
-### Observed results
+> "Thirty shirts. Ten small, ten medium, ten large. Needed 2026-10-28. — Priya, priya@example.com"
 
-The repository file listing and `git ls-files` showed only README.md outside Git metadata. No tests, test configuration, or test command exist. No application tests or demo cases were run, and no runtime behavior was verified.
+Extraction proposes each field beside the words it came from. Sizes sum to 30, matching the stated total; the deadline is a real date outside the lead time; nothing is missing. Export unlocks.
 
-The proposed success metric is synthetic acceptance-case pass rate, currently **not yet measured**. A case passes only when the application correctly accepts, blocks, or requests clarification according to the expected result without inventing missing details. Report X/N only after executing those cases.
+**Contradiction case**
 
-### Planned acceptance criteria
+> "Thirty shirts. Ten small, ten medium, five large. Needed September 28."
 
-| Case | Expected result |
-| --- | --- |
-| Complete normal inquiry | Accept only after founder review and successful validation |
-| Missing required field | Request clarification and block completion and export |
-| Requested total 30 with size sum 25 | Preserve both values, flag the discrepancy, and block completion and export |
-| Deadline without a year | Keep the year unresolved and request clarification |
-| Founder correction | Revalidate all required fields and arithmetic before permitting completion and export |
-| Unconfigured shirt style or print location | Require explicit configuration without inventing values |
-| Request outside the supported format | Flag the unsupported details for human review without silently converting them |
+Three separate failures caught at once:
+- Stated total is 30; sizes sum to 25. Both numbers are shown, export is blocked, and the app does not pick one.
+- "September 28" has no year, so the deadline stays unresolved.
+- No contact was given, so it's listed as missing.
 
-There is no measured evidence of extraction accuracy, time savings, revenue gains, user validation, or market uniqueness.
+Maya resolves them — confirms 25, supplies the year, adds her customer's email — and validation runs again before export becomes available.
 
-## Limitations and data handling
+---
 
-The planned format supports only the scoped shirt style, S/M/L sizes, and one print location. Extraction can be uncertain even when a message appears complete, so human review is required. Intake validation does not establish production feasibility or deadline availability.
+## What's real and what's simulated
 
-No application code establishes transmission, storage, or retention behavior. Provider data handling and application persistence remain undecided. No claims about local-only processing, encryption, or non-retention have been verified. Use synthetic inquiries for the planned demo.
+**Real:** the model call, the evidence gate, all validation, the ticket export, the acceptance cases.
 
-## Hackathon build window
+**Simulated:** the customers, the inquiries, the shop. Every name, email, and order in this repo is fictional.
 
-The intended Chatathon 2026 Misneach build window is three hours. Allocate 150 minutes to features and reserve the final 30 minutes for integration, testing, repository freeze, and submission. This is a planned schedule, not evidence of completed work.
+**Not claimed:** no integration with any shop-management system exists. A working local export does not establish a production workflow, and an intake ticket is not a quote, a confirmed order, or a promise the deadline can be met.
+
+---
+
+## Results
+
+<!-- FILL BEFORE SUBMITTING, or delete this whole section. A placeholder left in is worse than no numbers. -->
+
+- **Passed X/8 synthetic workflow cases.** Four must extract and export, two must ask rather than guess, two must block export. A case passes only when the app accepts, blocks, or asks as expected *without inventing a missing detail*.
+- **Intake timing, measured today on the four extractable cases:** N seconds filling the ticket by hand, M seconds through OrderReady including answering the gap questions.
+
+These are acceptance tests and a timed comparison on synthetic inquiries. They are not accuracy figures, and we don't extrapolate them to weekly or annual savings. We have no measured evidence of extraction accuracy in the wild, revenue impact, user validation, or market uniqueness.
+
+---
+
+## Limits
+
+- Extraction quality depends on the model, and a message can be ambiguous even when it looks complete. Human review is required on every ticket by design.
+- One garment, three sizes, one print location. Colour, pricing, artwork review, inventory, payments, messaging integrations, and production management are all out of scope — not deferred features we're claiming.
+- The evidence gate stops fabricated values. It cannot tell whether a correctly quoted value is what the customer actually meant.
+- Inquiry text is sent to the model provider for extraction. The app itself has no database and stores nothing between sessions. We make no verified claims about provider retention — use synthetic inquiries.
+
+---
+
+## Prior art
+
+Form builders already solve part of this. Jotform ships a screen-printing request template aimed squarely at reducing missing details, and it works well for shops whose customers fill in forms.
+
+OrderReady starts one step earlier. Maya's inquiries arrive as DMs and texts, and a solo shop can't require a form without losing the job. We work from the message she already received. We don't claim a form product couldn't build this.
+
+---
+
+## Files
+
+| File | Owner | Contains |
+|---|---|---|
+| `model.py` | Dev | Extraction prompt, JSON parsing, evidence gate, failure handling |
+| `fixtures.py` | Dev | Acceptance cases with expected outcomes |
+| `order_logic.py` | Devansh | Shop constants, validation rules, ticket rendering. No model calls. |
+| `app.py` | Devansh | Streamlit UI — paste box, field panel with evidence, gap questions, export |
+
+The two halves are independent by design. `order_logic.py` imports nothing from `model.py` and makes no network calls, so it can be built and tested against a hand-written dict while the model adapter is still being wired up. Neither owner waits on the other.
+
+## Team and contributions
+
+Northeastern undergraduates.
+
+| | |
+|---|---|
+| **Dev Luharuwalla** | Extraction and the evidence gate (`model.py`), acceptance fixtures and the timed intake comparison (`fixtures.py`), repository freeze and submission |
+| **Devansh** | Validation rules and ticket rendering (`order_logic.py`), review interface and export flow (`app.py`) |
+
+Both: interface freeze at the start, integration, demo rehearsal.
