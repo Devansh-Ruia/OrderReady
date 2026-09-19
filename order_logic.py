@@ -89,7 +89,8 @@ def validate(extraction, overrides=None, today=None):
             "blocks": blocks, "questions": questions, "total": total}
 
 
-def render_ticket(result):
+def render_ticket(result, source_text=None):
+    """source_text is the verbatim inquiry. Optional so older callers still work."""
     if not result["ok"]:
         raise ValueError("render_ticket called on an invalid result")
     f, counts = result["fields"], result["fields"]["sizes"]["value"]
@@ -105,15 +106,21 @@ def render_ticket(result):
         "Sizes",
     ]
     lines += [f"  {s} x {counts[s]}" for s in SIZES]
-    lines += ["", f"TOTAL    : {result['total']} shirts", "",
-              "Intake only — no pricing or artwork review."]
+    lines += ["", f"TOTAL    : {result['total']} shirts", ""]
+    # Export only fires after the founder ticks the review box, so this is a
+    # record of what already happened, not a claim we cannot back up.
+    lines += ["Reviewed by founder: yes", ""]
+    lines += ["Original inquiry:", source_text if source_text else "(not recorded)", ""]
+    lines += ["Intake only — no pricing or artwork review."]
     return "\n".join(lines)
 
 
-def ticket_json(result):
+def ticket_json(result, source_text=None):
     f, counts = result["fields"], result["fields"]["sizes"]["value"]
     return {"customer_name": f["customer_name"]["value"],
             "contact": f["contact"]["value"],
             "garment": GARMENT, "print_location": PRINT_LOCATION,
             "deadline": f["deadline"]["value"],
-            "sizes": counts, "total_quantity": result["total"]}
+            "sizes": counts, "total_quantity": result["total"],
+            "reviewed_by_founder": True,
+            "original_inquiry": source_text}

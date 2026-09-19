@@ -251,8 +251,8 @@ def prepare_ticket() -> None:
         state.prepare_error = "Complete the fields and human review before preparing a ticket."
         return
     state.prepared = {"snapshot": snapshot(),
-                      "ticket": render_ticket(result),
-                      "json": ticket_json(result)}
+                      "ticket": render_ticket(result, state.source_text),
+                      "json": ticket_json(result, state.source_text)}
     state.prepare_error = None
 
 
