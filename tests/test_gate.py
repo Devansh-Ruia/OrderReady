@@ -77,6 +77,27 @@ def test_exact_count_survives_the_vague_filter():
     assert dropped == []
 
 
+def test_evidence_survives_a_relocated_line_break():
+    """A quote that is word-for-word right but breaks the line in a different
+    place still counts — this is the wrapped-prose case from the demo fixtures."""
+    fields = {"sizes": {"value": {"S": 10, "M": 20, "L": 5},
+                        "evidence": "ten smalls,\ntwenty mediums\nand five larges"}}
+    dropped = _gate(fields, "ten smalls, twenty mediums\nand five larges")
+
+    assert fields["sizes"]["value"] == {"S": 10, "M": 20, "L": 5}
+    assert dropped == []
+
+
+def test_fabricated_quote_still_dies_after_normalisation():
+    """Forgiving spacing does not forgive made-up words: a wrong name is still
+    thrown away even when its quote is neatly spaced."""
+    fields = {"customer_name": {"value": "Priya", "evidence": "Priya   here"}}
+    dropped = _gate(fields, "Anya here, I need shirts.")
+
+    assert fields["customer_name"]["value"] is None
+    assert dropped == ["customer_name"]
+
+
 def test_evidence_matching_ignores_capitalisation():
     """Shouty capitals in the quote still count as a match."""
     fields = {"customer_name": {"value": "Priya", "evidence": "PRIYA"}}
