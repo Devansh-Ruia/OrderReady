@@ -1,4 +1,4 @@
-"""Offline domain, HTTP boundary, and Streamlit workflow tests."""
+"""Offline domain and HTTP boundary tests. Active UI coverage is in test_frontend."""
 
 import json
 from io import BytesIO
@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 from pydantic import ValidationError
-from streamlit.testing.v1 import AppTest
 
 from orderready import extraction, samples
 from orderready.export import NONCOMMITMENT, SERVICE, build_ticket
@@ -18,7 +17,6 @@ from orderready.models import ExtractionResult, OrderDraft
 from orderready.validation import QUANTITY_FIELDS, computed_total, parse_quantity, validate_order
 
 
-APP = Path(__file__).resolve().parents[1] / "app.py"
 CONTRADICTION = "Thirty shirts. Ten small, ten medium, five large. Needed September 28."
 INQUIRY_B = "Blue shirts: 25 total, 10 small, 10 medium, 5 large, needed 2026-10-28."
 
@@ -72,37 +70,6 @@ def fake_transport(monkeypatch, *, draft=None, failure=None):
     constructor = Mock(return_value=client)
     monkeypatch.setattr(extraction, "build_opener", constructor)
     return constructor, client
-
-
-def new_app():
-    at = AppTest.from_file(str(APP), default_timeout=10).run()
-    assert not at.exception
-    return at
-
-
-def begin_manual(at, source=INQUIRY_B):
-    at.text_area(key="source_text").set_value(source).run()
-    at.button(key="manual").click().run()
-    assert not at.exception
-    return at
-
-
-def fill_fields(at, **overrides):
-    values = dict(color="blue", requested_total="25", size_s="10", size_m="10", size_l="5",
-                  deadline_raw="2026-10-28", deadline_iso="2026-10-28")
-    values.update(overrides)
-    for field, value in values.items():
-        at.text_input(key=f"edit_{field}").set_value(value)
-    at.run()
-    assert not at.exception
-
-
-def acknowledge_and_prepare(at):
-    at.checkbox(key="reviewed").check().run()
-    assert not at.button(key="prepare").disabled
-    at.button(key="prepare").click().run()
-    assert not at.exception
-    assert len(at.download_button) == 1
 
 
 def test_contract_defaults_extras_and_business_rules_are_separate():
@@ -238,12 +205,6 @@ def test_broken_optional_configuration_keeps_manual_intake_usable(monkeypatch, o
     monkeypatch.setattr(extraction, "load_dotenv", Mock(side_effect=failure))
     result = extraction.extract_inquiry(INQUIRY_B)
     assert result.status == "unavailable" and result.message == extraction.UNAVAILABLE_MESSAGE
-    at = new_app()
-    assert extraction.UNAVAILABLE_MESSAGE in [item.value for item in at.warning]
-    begin_manual(at)
-    fill_fields(at)
-    acknowledge_and_prepare(at)
-    assert "Mode: manual" in at.session_state.prepared["ticket"]
     offline.assert_not_called()
 
 
@@ -420,178 +381,6 @@ def test_real_http_transport_never_redirects_or_retries(monkeypatch, code):
     assert requests[0].full_url == "https://api.anthropic.com/v1/messages"
 
 
-def test_app_requires_explicit_manual_start_and_blank_fields(offline):
-    at = new_app()
-    assert extraction.UNAVAILABLE_MESSAGE in [warning.value for warning in at.warning]
-    assert at.session_state.mode is None and len(at.text_input) == 0
-    at.text_area(key="source_text").set_value(INQUIRY_B).run()
-    assert at.session_state.mode is None
-    at.button(key="manual").click().run()
-    assert at.session_state.mode == "manual"
-    assert all(widget.value == "" for widget in at.text_input)
-    assert at.button(key="prepare").disabled
-    assert "Needs information" in [item.value for item in at.info]
-    offline.assert_not_called()
-
-
-def test_app_edit_persistence_and_malformed_values(offline):
-    at = begin_manual(new_app())
-    fill_fields(at, size_m="1.5")
-    at.run()
-    assert at.text_input(key="edit_size_m").value == "1.5"
-    assert at.text_input(key="edit_color").value == "blue"
-    assert not at.metric and not at.download_button
-    assert "Needs correction" in [item.value for item in at.error]
-    assert any("whole number" in item.value for item in at.error)
-    at.text_input(key="edit_size_m").set_value("10").run()
-    assert at.metric[0].value == "25"
-    assert at.button(key="prepare").disabled
-    at.checkbox(key="reviewed").check().run()
-    at.text_input(key="edit_color").set_value("navy").run()
-    assert at.checkbox(key="reviewed").value is False
-    offline.assert_not_called()
-
-
-def test_app_preparation_freezes_controls_and_download_has_no_requests(monkeypatch, valid):
-    _, client = fake_transport(monkeypatch, draft=valid)
-    at = new_app()
-    at.text_area(key="source_text").set_value(INQUIRY_B).run()
-    at.button(key="extract").click().run()
-    assert client.open.call_count == 1
-    at.run()
-    at.checkbox(key="reviewed").check().run()
-    assert client.open.call_count == 1
-    at.button(key="prepare").click().run()
-    assert not at.exception
-    assert all(widget.disabled for widget in at.text_input)
-    assert at.text_area(key="source_text").disabled
-    assert at.checkbox(key="reviewed").disabled
-    assert at.button(key="extract").disabled and at.button(key="manual").disabled
-    ticket = at.session_state.prepared["ticket"]
-    assert "Mode: live_ai" in ticket
-    at.download_button(key="download").click().run()
-    assert at.session_state.prepared["ticket"] == ticket
-    assert client.open.call_count == 1
-    at.button(key="edit_intake").click().run()
-    assert not at.download_button
-    assert not at.checkbox(key="reviewed").value
-    assert not at.text_area(key="source_text").disabled
-    assert at.text_input(key="edit_size_s").value == "10"
-
-
-def test_app_contradiction_needs_deliberate_correction_and_each_issue_resolved(monkeypatch, contradiction):
-    _, client = fake_transport(monkeypatch, draft=contradiction)
-    at = new_app()
-    at.text_area(key="source_text").set_value(CONTRADICTION).run()
-    at.button(key="extract").click().run()
-    assert at.text_input(key="edit_requested_total").value == "30"
-    assert [at.text_input(key=f"edit_size_{size}").value for size in "sml"] == ["10", "10", "5"]
-    assert at.metric[0].value == "25"
-    assert at.text_input(key="edit_deadline_raw").value == "September 28"
-    assert at.text_input(key="edit_deadline_iso").value == ""
-    assert at.button(key="prepare").disabled and not at.download_button
-    original = at.session_state.history[0]["draft"].copy()
-    fill_fields(at, deadline_raw="September 28", deadline_iso="2026-09-28")
-    assert len(at.session_state.active_issues) == 2
-    at.checkbox(key="reviewed").check().run()
-    assert at.button(key="prepare").disabled
-    at.checkbox(key="resolved_1_0").check().run()
-    assert not at.checkbox(key="reviewed").value
-    at.checkbox(key="reviewed").check().run()
-    assert at.button(key="prepare").disabled
-    at.checkbox(key="resolved_1_1").check().run()
-    assert not at.checkbox(key="reviewed").value
-    acknowledge_and_prepare(at)
-    assert at.session_state.history[0]["draft"] == original
-    assert "Requested total: 25" in at.session_state.prepared["ticket"]
-    assert client.open.call_count == 1
-
-
-def test_source_change_and_failed_extraction_preserve_edits_and_provenance(monkeypatch, valid):
-    _, client = fake_transport(monkeypatch, draft=valid)
-    at = new_app()
-    at.text_area(key="source_text").set_value("Inquiry A").run()
-    at.button(key="extract").click().run()
-    at.text_input(key="edit_color").set_value("navy").run()
-    at.checkbox(key="reviewed").check().run()
-    at.text_area(key="source_text").set_value(INQUIRY_B).run()
-    assert at.session_state.stale and not at.session_state.reviewed
-    assert at.button(key="prepare").disabled
-    client.open.side_effect = RuntimeError("private request details")
-    at.button(key="extract").click().run()
-    assert at.text_input(key="edit_color").value == "navy"
-    assert at.session_state.mode == "live_ai" and at.session_state.draft_source == "Inquiry A"
-    assert at.session_state.history[0]["source_text"] == "Inquiry A"
-    assert at.session_state.stale and not at.session_state.reviewed
-    assert "Earlier extraction" in at.expander[0].label
-    assert "Inquiry A" in [item.value for item in at.text]
-    assert at.button(key="retry")
-    at.run()
-    assert client.open.call_count == 2
-    at.button(key="retry").click().run()
-    assert client.open.call_count == 3
-    at.button(key="manual").click().run()
-    assert at.session_state.mode == "manual" and not at.session_state.stale
-    assert all(widget.value == "" for widget in at.text_input)
-    fill_fields(at)
-    acknowledge_and_prepare(at)
-    ticket = at.session_state.prepared["ticket"]
-    assert INQUIRY_B in ticket and "Inquiry A" not in ticket
-    assert "Mode: manual" in ticket and "Manual entry" in ticket
-    assert at.session_state.history[0]["source_text"] == "Inquiry A"
-    assert "Earlier extraction" in at.expander[0].label
-    assert client.open.call_count == 3
-
-
-def test_switching_to_manual_same_source_keeps_known_issues(monkeypatch, contradiction):
-    fake_transport(monkeypatch, draft=contradiction)
-    at = new_app()
-    at.text_area(key="source_text").set_value(CONTRADICTION).run()
-    at.button(key="extract").click().run()
-    at.button(key="manual").click().run()
-    assert at.session_state.mode == "manual"
-    assert at.session_state.active_issues == contradiction.unresolved_issues
-    fill_fields(at)
-    at.checkbox(key="reviewed").check().run()
-    assert at.button(key="prepare").disabled
-
-
-@pytest.mark.parametrize("key,value", [("source_text", "changed source"), ("edit_color", "red"),
-                                       ("mode", "live_ai"), ("reviewed", False)])
-def test_prepared_snapshot_rejects_state_changes_even_without_callbacks(key, value):
-    at = begin_manual(new_app())
-    fill_fields(at)
-    acknowledge_and_prepare(at)
-    at.session_state[key] = value
-    at.run()
-    assert not at.exception
-    assert at.session_state.prepared is None and not at.download_button
-    assert not at.session_state.reviewed
-
-
-def test_sample_loading_uses_only_input_and_requires_explicit_start(monkeypatch):
-    monkeypatch.setattr(samples, "load_samples", lambda: ([
-        {"label": "First", "input": CONTRADICTION}, {"label": "Second", "input": INQUIRY_B},
-    ], None))
-    at = new_app()
-    at.selectbox(key="sample_choice").set_value(1).run()
-    assert at.text_area(key="source_text").value == ""
-    at.button(key="load_sample").click().run()
-    assert at.text_area(key="source_text").value == INQUIRY_B
-    assert at.session_state.mode is None
-    at.button(key="manual").click().run()
-    fill_fields(at)
-    acknowledge_and_prepare(at)
-    assert at.selectbox(key="sample_choice").disabled
-    assert at.button(key="load_sample").disabled
-    at.button(key="edit_intake").click().run()
-    at.checkbox(key="reviewed").check().run()
-    at.selectbox(key="sample_choice").set_value(0).run()
-    assert not at.session_state.reviewed
-    at.button(key="load_sample").click().run()
-    assert at.session_state.stale and at.button(key="prepare").disabled
-
-
 @pytest.mark.parametrize("records", ["not JSON", "{}", '[{"label": "x"}]', '[null, 3]', '\ufeff[]'])
 def test_malformed_sample_fixtures_are_safe(monkeypatch, records):
     # Mock file reads so tests never persist any inquiry fixture.
@@ -612,9 +401,3 @@ def test_samples_ignore_expected_outputs(monkeypatch):
     assert warning is None
 
 
-def test_sample_warning_does_not_crash_app(monkeypatch):
-    monkeypatch.setattr(samples, "load_samples", lambda: ([], "Optional samples could not be loaded."))
-    at = new_app()
-    assert any("Optional samples" in item.value for item in at.warning)
-    begin_manual(at)
-    assert not at.exception

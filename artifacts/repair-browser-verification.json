@@ -1,0 +1,1669 @@
+{
+  "source": "Jordan Rivera, jordan@example.com. We need 30 shirts. S 10, M 10, L 5. Needed September 28",
+  "manual": {
+    "before": {
+      "desktop": {
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "dpr": 1,
+          "scale": 1
+        },
+        "panel": {
+          "x": 656.671875,
+          "y": 70,
+          "width": 703.328125,
+          "height": 946.78125,
+          "bottom": 1016.78125
+        },
+        "inputs": [
+          {
+            "label": "Customer name",
+            "value": "",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 681.671875,
+              "y": 217.390625,
+              "width": 653.328125,
+              "height": 40,
+              "bottom": 257.390625
+            }
+          },
+          {
+            "label": "Email or phone",
+            "value": "",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 681.671875,
+              "y": 301.390625,
+              "width": 653.328125,
+              "height": 40,
+              "bottom": 341.390625
+            }
+          },
+          {
+            "label": "Size S",
+            "value": "10",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 681.671875,
+              "y": 441.390625,
+              "width": 207.109375,
+              "height": 40,
+              "bottom": 481.390625
+            }
+          },
+          {
+            "label": "Size M",
+            "value": "10",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 904.78125,
+              "y": 441.390625,
+              "width": 207.109375,
+              "height": 40,
+              "bottom": 481.390625
+            }
+          },
+          {
+            "label": "Size L",
+            "value": "5",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 1127.890625,
+              "y": 441.390625,
+              "width": 207.109375,
+              "height": 40,
+              "bottom": 481.390625
+            }
+          },
+          {
+            "label": "Requested quantity",
+            "value": "30",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 681.671875,
+              "y": 525.390625,
+              "width": 318.65625,
+              "height": 40,
+              "bottom": 565.390625
+            }
+          },
+          {
+            "label": "Deadline",
+            "value": "September 28",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 1016.328125,
+              "y": 525.390625,
+              "width": 318.671875,
+              "height": 40,
+              "bottom": 565.390625
+            }
+          }
+        ],
+        "messages": [
+          {
+            "text": "Manual entry",
+            "box": {
+              "x": 681.671875,
+              "y": 151,
+              "width": 653.328125,
+              "height": 38.390625,
+              "bottom": 189.390625
+            }
+          },
+          {
+            "text": "3 missing fields · 0 unresolved issues",
+            "box": {
+              "x": 681.671875,
+              "y": 713.390625,
+              "width": 653.328125,
+              "height": 38.390625,
+              "bottom": 751.78125
+            }
+          },
+          {
+            "text": "deadline is not a real date (YYYY-MM-DD)",
+            "box": {
+              "x": 681.671875,
+              "y": 751.78125,
+              "width": 653.328125,
+              "height": 56,
+              "bottom": 807.78125
+            }
+          },
+          {
+            "text": "customer said 30 shirts, sizes add up to 25",
+            "box": {
+              "x": 681.671875,
+              "y": 823.78125,
+              "width": 653.328125,
+              "height": 56,
+              "bottom": 879.78125
+            }
+          },
+          {
+            "text": "Still needed · customer name, email or phone, deadline",
+            "box": {
+              "x": 681.671875,
+              "y": 895.78125,
+              "width": 653.328125,
+              "height": 56,
+              "bottom": 951.78125
+            }
+          }
+        ],
+        "documentOverflow": false,
+        "reviewOverflows": []
+      },
+      "mobile": {
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "dpr": 1,
+          "scale": 1
+        },
+        "panel": {
+          "x": 16,
+          "y": 65.15625,
+          "width": 358,
+          "height": 1324.375,
+          "bottom": 1389.53125
+        },
+        "inputs": [
+          {
+            "label": "Customer name",
+            "value": "",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 204.546875,
+              "width": 324,
+              "height": 40,
+              "bottom": 244.546875
+            }
+          },
+          {
+            "label": "Email or phone",
+            "value": "",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 288.546875,
+              "width": 324,
+              "height": 40,
+              "bottom": 328.546875
+            }
+          },
+          {
+            "label": "Size S",
+            "value": "10",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 470.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 510.140625
+            }
+          },
+          {
+            "label": "Size M",
+            "value": "10",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 554.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 594.140625
+            }
+          },
+          {
+            "label": "Size L",
+            "value": "5",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 638.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 678.140625
+            }
+          },
+          {
+            "label": "Requested quantity",
+            "value": "30",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 722.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 762.140625
+            }
+          },
+          {
+            "label": "Deadline",
+            "value": "September 28",
+            "fontSize": "14px",
+            "border": "1px solid rgb(255, 255, 255)",
+            "background": "rgb(255, 255, 255)",
+            "box": {
+              "x": 33,
+              "y": 806.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 846.140625
+            }
+          }
+        ],
+        "messages": [
+          {
+            "text": "Manual entry",
+            "box": {
+              "x": 33,
+              "y": 138.15625,
+              "width": 324,
+              "height": 38.390625,
+              "bottom": 176.546875
+            }
+          },
+          {
+            "text": "3 missing fields · 0 unresolved issues",
+            "box": {
+              "x": 33,
+              "y": 1070.140625,
+              "width": 324,
+              "height": 38.390625,
+              "bottom": 1108.53125
+            }
+          },
+          {
+            "text": "deadline is not a real date (YYYY-MM-DD)",
+            "box": {
+              "x": 33,
+              "y": 1108.53125,
+              "width": 324,
+              "height": 56,
+              "bottom": 1164.53125
+            }
+          },
+          {
+            "text": "customer said 30 shirts, sizes add up to 25",
+            "box": {
+              "x": 33,
+              "y": 1180.53125,
+              "width": 324,
+              "height": 56,
+              "bottom": 1236.53125
+            }
+          },
+          {
+            "text": "Still needed · customer name, email or phone, deadline",
+            "box": {
+              "x": 33,
+              "y": 1252.53125,
+              "width": 324,
+              "height": 80,
+              "bottom": 1332.53125
+            }
+          }
+        ],
+        "documentOverflow": false,
+        "reviewOverflows": []
+      }
+    },
+    "after": {
+      "desktop": {
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "dpr": 1,
+          "scale": 1
+        },
+        "panel": {
+          "x": 656.671875,
+          "y": 70,
+          "width": 703.328125,
+          "height": 774.765625,
+          "bottom": 844.765625
+        },
+        "inputs": [
+          {
+            "label": "Customer name",
+            "value": "",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 681.671875,
+              "y": 217.390625,
+              "width": 320.65625,
+              "height": 40,
+              "bottom": 257.390625
+            }
+          },
+          {
+            "label": "Email or phone",
+            "value": "",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 1014.328125,
+              "y": 217.390625,
+              "width": 320.671875,
+              "height": 40,
+              "bottom": 257.390625
+            }
+          },
+          {
+            "label": "Size S",
+            "value": "10",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 681.671875,
+              "y": 398.984375,
+              "width": 154.328125,
+              "height": 40,
+              "bottom": 438.984375
+            }
+          },
+          {
+            "label": "Size M",
+            "value": "10",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 848,
+              "y": 398.984375,
+              "width": 154.34375,
+              "height": 40,
+              "bottom": 438.984375
+            }
+          },
+          {
+            "label": "Size L",
+            "value": "5",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 1014.34375,
+              "y": 398.984375,
+              "width": 154.328125,
+              "height": 40,
+              "bottom": 438.984375
+            }
+          },
+          {
+            "label": "Requested total",
+            "value": "30",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 1180.671875,
+              "y": 398.984375,
+              "width": 154.328125,
+              "height": 40,
+              "bottom": 438.984375
+            }
+          },
+          {
+            "label": "Deadline",
+            "value": "September 28",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 681.671875,
+              "y": 581.375,
+              "width": 653.328125,
+              "height": 40,
+              "bottom": 621.375
+            }
+          }
+        ],
+        "messages": [
+          {
+            "text": "Manual entry",
+            "box": {
+              "x": 681.671875,
+              "y": 151,
+              "width": 653.328125,
+              "height": 38.390625,
+              "bottom": 189.390625
+            }
+          },
+          {
+            "text": "Enter customer name.",
+            "box": {
+              "x": 681.671875,
+              "y": 261.390625,
+              "width": 320.65625,
+              "height": 56,
+              "bottom": 317.390625
+            }
+          },
+          {
+            "text": "Enter email or phone.",
+            "box": {
+              "x": 1014.328125,
+              "y": 261.390625,
+              "width": 320.671875,
+              "height": 56,
+              "bottom": 317.390625
+            }
+          },
+          {
+            "text": "25 assigned / 30 requested",
+            "box": {
+              "x": 681.671875,
+              "y": 446.984375,
+              "width": 653.328125,
+              "height": 38.390625,
+              "bottom": 485.375
+            }
+          },
+          {
+            "text": "The size counts add up to 25. The request says 30.",
+            "box": {
+              "x": 681.671875,
+              "y": 477.375,
+              "width": 653.328125,
+              "height": 56,
+              "bottom": 533.375
+            }
+          },
+          {
+            "text": "deadline is not a real date (YYYY-MM-DD)",
+            "box": {
+              "x": 681.671875,
+              "y": 625.375,
+              "width": 653.328125,
+              "height": 56,
+              "bottom": 681.375
+            }
+          },
+          {
+            "text": "Original inquiry for this draft",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "width": 0,
+              "height": 0,
+              "bottom": 0
+            }
+          },
+          {
+            "text": "Customer name",
+            "box": {
+              "x": 698.671875,
+              "y": 888.546875,
+              "width": 619.328125,
+              "height": 38.390625,
+              "bottom": 926.9375
+            }
+          },
+          {
+            "text": "Email or phone",
+            "box": {
+              "x": 698.671875,
+              "y": 968.53125,
+              "width": 619.328125,
+              "height": 38.390625,
+              "bottom": 1006.921875
+            }
+          },
+          {
+            "text": "Size quantities",
+            "box": {
+              "x": 698.671875,
+              "y": 1048.515625,
+              "width": 619.328125,
+              "height": 38.390625,
+              "bottom": 1086.90625
+            }
+          },
+          {
+            "text": "Deadline",
+            "box": {
+              "x": 698.671875,
+              "y": 1128.5,
+              "width": 619.328125,
+              "height": 38.390625,
+              "bottom": 1166.890625
+            }
+          },
+          {
+            "text": "Requested quantity",
+            "box": {
+              "x": 698.671875,
+              "y": 1208.484375,
+              "width": 619.328125,
+              "height": 38.390625,
+              "bottom": 1246.875
+            }
+          },
+          {
+            "text": "3 missing fields · 0 unresolved issues",
+            "box": {
+              "x": 681.671875,
+              "y": 757.375,
+              "width": 653.328125,
+              "height": 38.390625,
+              "bottom": 795.765625
+            }
+          }
+        ],
+        "documentOverflow": false,
+        "reviewOverflows": []
+      },
+      "mobile": {
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "dpr": 1,
+          "scale": 1
+        },
+        "panel": {
+          "x": 16,
+          "y": 65.15625,
+          "width": 358,
+          "height": 1162.765625,
+          "bottom": 1227.921875
+        },
+        "inputs": [
+          {
+            "label": "Customer name",
+            "value": "",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 204.546875,
+              "width": 324,
+              "height": 40,
+              "bottom": 244.546875
+            }
+          },
+          {
+            "label": "Email or phone",
+            "value": "",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 344.546875,
+              "width": 324,
+              "height": 40,
+              "bottom": 384.546875
+            }
+          },
+          {
+            "label": "Size S",
+            "value": "10",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 526.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 566.140625
+            }
+          },
+          {
+            "label": "Size M",
+            "value": "10",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 606.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 646.140625
+            }
+          },
+          {
+            "label": "Size L",
+            "value": "5",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 686.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 726.140625
+            }
+          },
+          {
+            "label": "Requested total",
+            "value": "30",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 766.140625,
+              "width": 324,
+              "height": 40,
+              "bottom": 806.140625
+            }
+          },
+          {
+            "label": "Deadline",
+            "value": "September 28",
+            "fontSize": "16px",
+            "border": "1px solid rgb(139, 129, 116)",
+            "background": "rgb(247, 244, 238)",
+            "box": {
+              "x": 33,
+              "y": 972.53125,
+              "width": 324,
+              "height": 40,
+              "bottom": 1012.53125
+            }
+          }
+        ],
+        "messages": [
+          {
+            "text": "Manual entry",
+            "box": {
+              "x": 33,
+              "y": 138.15625,
+              "width": 324,
+              "height": 38.390625,
+              "bottom": 176.546875
+            }
+          },
+          {
+            "text": "Enter customer name.",
+            "box": {
+              "x": 33,
+              "y": 248.546875,
+              "width": 324,
+              "height": 56,
+              "bottom": 304.546875
+            }
+          },
+          {
+            "text": "Enter email or phone.",
+            "box": {
+              "x": 33,
+              "y": 388.546875,
+              "width": 324,
+              "height": 56,
+              "bottom": 444.546875
+            }
+          },
+          {
+            "text": "25 assigned / 30 requested",
+            "box": {
+              "x": 33,
+              "y": 814.140625,
+              "width": 324,
+              "height": 38.390625,
+              "bottom": 852.53125
+            }
+          },
+          {
+            "text": "The size counts add up to 25. The request says 30.",
+            "box": {
+              "x": 33,
+              "y": 844.53125,
+              "width": 324,
+              "height": 80,
+              "bottom": 924.53125
+            }
+          },
+          {
+            "text": "deadline is not a real date (YYYY-MM-DD)",
+            "box": {
+              "x": 33,
+              "y": 1016.53125,
+              "width": 324,
+              "height": 56,
+              "bottom": 1072.53125
+            }
+          },
+          {
+            "text": "Original inquiry for this draft",
+            "box": {
+              "x": 50,
+              "y": 1148.53125,
+              "width": 290,
+              "height": 38.390625,
+              "bottom": 1186.921875
+            }
+          },
+          {
+            "text": "Customer name",
+            "box": {
+              "x": 50,
+              "y": 1324.484375,
+              "width": 290,
+              "height": 38.390625,
+              "bottom": 1362.875
+            }
+          },
+          {
+            "text": "Email or phone",
+            "box": {
+              "x": 50,
+              "y": 1404.46875,
+              "width": 290,
+              "height": 38.390625,
+              "bottom": 1442.859375
+            }
+          },
+          {
+            "text": "Size quantities",
+            "box": {
+              "x": 50,
+              "y": 1484.453125,
+              "width": 290,
+              "height": 38.390625,
+              "bottom": 1522.84375
+            }
+          },
+          {
+            "text": "Deadline",
+            "box": {
+              "x": 50,
+              "y": 1564.4375,
+              "width": 290,
+              "height": 38.390625,
+              "bottom": 1602.828125
+            }
+          },
+          {
+            "text": "Requested quantity",
+            "box": {
+              "x": 50,
+              "y": 1644.421875,
+              "width": 290,
+              "height": 38.390625,
+              "bottom": 1682.8125
+            }
+          },
+          {
+            "text": "3 missing fields · 0 unresolved issues",
+            "box": {
+              "x": 33,
+              "y": 1148.53125,
+              "width": 324,
+              "height": 38.390625,
+              "bottom": 1186.921875
+            }
+          }
+        ],
+        "documentOverflow": false,
+        "reviewOverflows": []
+      }
+    },
+    "tabOrder": [
+      {
+        "label": "Customer name",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": "Email or phone",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": "Help for Size S",
+        "tag": "BUTTON",
+        "text": ""
+      },
+      {
+        "label": "Size S",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": "Help for Size M",
+        "tag": "BUTTON",
+        "text": ""
+      },
+      {
+        "label": "Size M",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": "Help for Size L",
+        "tag": "BUTTON",
+        "text": ""
+      },
+      {
+        "label": "Size L",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": "Help for Requested total",
+        "tag": "BUTTON",
+        "text": ""
+      },
+      {
+        "label": "Requested total",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": "Help for Deadline",
+        "tag": "BUTTON",
+        "text": ""
+      },
+      {
+        "label": "Deadline",
+        "tag": "INPUT",
+        "text": ""
+      },
+      {
+        "label": null,
+        "tag": "SUMMARY",
+        "text": "keyboard_arrow_rightView source details"
+      },
+      {
+        "label": "I reviewed all fields and resolved the issues.",
+        "tag": "INPUT",
+        "text": ""
+      }
+    ],
+    "focus": {
+      "active": true,
+      "border": "1px solid rgb(182, 73, 29)",
+      "shadow": "none"
+    },
+    "invalidAcknowledgmentBlocked": true,
+    "originalSourceAccessible": true
+  },
+  "mocked": {
+    "explicitlyMocked": true,
+    "deadlineCaption": "Customer wrote \"Needed September 28\"",
+    "evidence": [
+      "Jordan Rivera, jordan@example.com. We need 30 shirts. S 10, M 10, L 5. Needed September 28",
+      "Jordan Rivera",
+      "jordan@example.com",
+      "S 10, M 10, L 5",
+      "Needed September 28",
+      "We need 30 shirts"
+    ],
+    "keyboardSourceDetails": true,
+    "desktop": {
+      "viewport": {
+        "width": 1440,
+        "height": 900,
+        "dpr": 1,
+        "scale": 1
+      },
+      "panel": {
+        "x": 656.671875,
+        "y": 70,
+        "width": 703.328125,
+        "height": 861.15625,
+        "bottom": 931.15625
+      },
+      "inputs": [
+        {
+          "label": "Customer name",
+          "value": "Jordan Rivera",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 681.671875,
+            "y": 217.390625,
+            "width": 320.65625,
+            "height": 40,
+            "bottom": 257.390625
+          }
+        },
+        {
+          "label": "Email or phone",
+          "value": "jordan@example.com",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 1014.328125,
+            "y": 217.390625,
+            "width": 320.671875,
+            "height": 40,
+            "bottom": 257.390625
+          }
+        },
+        {
+          "label": "Size S",
+          "value": "10",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 681.671875,
+            "y": 338.984375,
+            "width": 154.328125,
+            "height": 40,
+            "bottom": 378.984375
+          }
+        },
+        {
+          "label": "Size M",
+          "value": "10",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 848,
+            "y": 338.984375,
+            "width": 154.34375,
+            "height": 40,
+            "bottom": 378.984375
+          }
+        },
+        {
+          "label": "Size L",
+          "value": "5",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 1014.34375,
+            "y": 338.984375,
+            "width": 154.328125,
+            "height": 40,
+            "bottom": 378.984375
+          }
+        },
+        {
+          "label": "Requested total",
+          "value": "30",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 1180.671875,
+            "y": 338.984375,
+            "width": 154.328125,
+            "height": 40,
+            "bottom": 378.984375
+          }
+        },
+        {
+          "label": "Deadline",
+          "value": "",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 681.671875,
+            "y": 521.375,
+            "width": 653.328125,
+            "height": 40,
+            "bottom": 561.375
+          }
+        }
+      ],
+      "messages": [
+        {
+          "text": "AI proposal awaiting your review",
+          "box": {
+            "x": 681.671875,
+            "y": 151,
+            "width": 653.328125,
+            "height": 38.390625,
+            "bottom": 189.390625
+          }
+        },
+        {
+          "text": "25 assigned / 30 requested",
+          "box": {
+            "x": 681.671875,
+            "y": 386.984375,
+            "width": 653.328125,
+            "height": 38.390625,
+            "bottom": 425.375
+          }
+        },
+        {
+          "text": "The size counts add up to 25. The request says 30.",
+          "box": {
+            "x": 681.671875,
+            "y": 417.375,
+            "width": 653.328125,
+            "height": 56,
+            "bottom": 473.375
+          }
+        },
+        {
+          "text": "Customer wrote \"Needed September 28\"",
+          "box": {
+            "x": 681.671875,
+            "y": 565.375,
+            "width": 653.328125,
+            "height": 38.390625,
+            "bottom": 603.765625
+          }
+        },
+        {
+          "text": "Enter a complete deadline including the year.",
+          "box": {
+            "x": 681.671875,
+            "y": 591.765625,
+            "width": 653.328125,
+            "height": 56,
+            "bottom": 647.765625
+          }
+        },
+        {
+          "text": "Original inquiry for this draft",
+          "box": {
+            "x": 698.671875,
+            "y": 723.765625,
+            "width": 619.328125,
+            "height": 38.390625,
+            "bottom": 762.15625
+          }
+        },
+        {
+          "text": "Customer name",
+          "box": {
+            "x": 698.671875,
+            "y": 854.9375,
+            "width": 619.328125,
+            "height": 38.390625,
+            "bottom": 893.328125
+          }
+        },
+        {
+          "text": "Email or phone",
+          "box": {
+            "x": 698.671875,
+            "y": 963.71875,
+            "width": 619.328125,
+            "height": 38.390625,
+            "bottom": 1002.109375
+          }
+        },
+        {
+          "text": "Size quantities",
+          "box": {
+            "x": 698.671875,
+            "y": 1072.5,
+            "width": 619.328125,
+            "height": 38.390625,
+            "bottom": 1110.890625
+          }
+        },
+        {
+          "text": "Deadline",
+          "box": {
+            "x": 698.671875,
+            "y": 1181.28125,
+            "width": 619.328125,
+            "height": 38.390625,
+            "bottom": 1219.671875
+          }
+        },
+        {
+          "text": "Requested quantity",
+          "box": {
+            "x": 698.671875,
+            "y": 1290.0625,
+            "width": 619.328125,
+            "height": 38.390625,
+            "bottom": 1328.453125
+          }
+        },
+        {
+          "text": "1 missing fields · 4 unresolved issues",
+          "box": {
+            "x": 681.671875,
+            "y": 723.765625,
+            "width": 653.328125,
+            "height": 38.390625,
+            "bottom": 762.15625
+          }
+        }
+      ],
+      "documentOverflow": false,
+      "reviewOverflows": []
+    },
+    "mobile": {
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scale": 1
+      },
+      "panel": {
+        "x": 16,
+        "y": 65.15625,
+        "width": 358,
+        "height": 1231.15625,
+        "bottom": 1296.3125
+      },
+      "inputs": [
+        {
+          "label": "Customer name",
+          "value": "Jordan Rivera",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 204.546875,
+            "width": 324,
+            "height": 40,
+            "bottom": 244.546875
+          }
+        },
+        {
+          "label": "Email or phone",
+          "value": "jordan@example.com",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 284.546875,
+            "width": 324,
+            "height": 40,
+            "bottom": 324.546875
+          }
+        },
+        {
+          "label": "Size S",
+          "value": "10",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 406.140625,
+            "width": 324,
+            "height": 40,
+            "bottom": 446.140625
+          }
+        },
+        {
+          "label": "Size M",
+          "value": "10",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 486.140625,
+            "width": 324,
+            "height": 40,
+            "bottom": 526.140625
+          }
+        },
+        {
+          "label": "Size L",
+          "value": "5",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 566.140625,
+            "width": 324,
+            "height": 40,
+            "bottom": 606.140625
+          }
+        },
+        {
+          "label": "Requested total",
+          "value": "30",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 646.140625,
+            "width": 324,
+            "height": 40,
+            "bottom": 686.140625
+          }
+        },
+        {
+          "label": "Deadline",
+          "value": "",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": 852.53125,
+            "width": 324,
+            "height": 40,
+            "bottom": 892.53125
+          }
+        }
+      ],
+      "messages": [
+        {
+          "text": "AI proposal awaiting your review",
+          "box": {
+            "x": 33,
+            "y": 138.15625,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": 176.546875
+          }
+        },
+        {
+          "text": "25 assigned / 30 requested",
+          "box": {
+            "x": 33,
+            "y": 694.140625,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": 732.53125
+          }
+        },
+        {
+          "text": "The size counts add up to 25. The request says 30.",
+          "box": {
+            "x": 33,
+            "y": 724.53125,
+            "width": 324,
+            "height": 80,
+            "bottom": 804.53125
+          }
+        },
+        {
+          "text": "Customer wrote \"Needed September 28\"",
+          "box": {
+            "x": 33,
+            "y": 896.53125,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": 934.921875
+          }
+        },
+        {
+          "text": "Enter a complete deadline including the year.",
+          "box": {
+            "x": 33,
+            "y": 922.921875,
+            "width": 324,
+            "height": 80,
+            "bottom": 1002.921875
+          }
+        },
+        {
+          "text": "Original inquiry for this draft",
+          "box": {
+            "x": 50,
+            "y": 1078.921875,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 1117.3125
+          }
+        },
+        {
+          "text": "Customer name",
+          "box": {
+            "x": 50,
+            "y": 1254.875,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 1293.265625
+          }
+        },
+        {
+          "text": "Email or phone",
+          "box": {
+            "x": 50,
+            "y": 1363.65625,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 1402.046875
+          }
+        },
+        {
+          "text": "Size quantities",
+          "box": {
+            "x": 50,
+            "y": 1472.4375,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 1510.828125
+          }
+        },
+        {
+          "text": "Deadline",
+          "box": {
+            "x": 50,
+            "y": 1581.21875,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 1619.609375
+          }
+        },
+        {
+          "text": "Requested quantity",
+          "box": {
+            "x": 50,
+            "y": 1690,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 1728.390625
+          }
+        },
+        {
+          "text": "1 missing fields · 4 unresolved issues",
+          "box": {
+            "x": 33,
+            "y": 1078.921875,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": 1117.3125
+          }
+        }
+      ],
+      "documentOverflow": false,
+      "reviewOverflows": []
+    },
+    "acknowledgmentCannotBypassInvalidData": true,
+    "unresolvedIssuesBlockCorrectFields": true,
+    "issueResolutionInvalidatesAcknowledgment": true,
+    "download": {
+      "filename": "orderready-intake.txt",
+      "bytes": 421,
+      "matchesExpectedTicket": true
+    },
+    "editInvalidatesApprovalAndDownload": true,
+    "staleDraftKeepsOriginalSourceAndEvidence": true,
+    "expandedMobile": {
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scale": 1
+      },
+      "panel": {
+        "x": 16,
+        "y": -935.84375,
+        "width": 358,
+        "height": 1980.015625,
+        "bottom": 1044.171875
+      },
+      "inputs": [
+        {
+          "label": "Customer name",
+          "value": "Jordan Rivera",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -700.453125,
+            "width": 324,
+            "height": 40,
+            "bottom": -660.453125
+          }
+        },
+        {
+          "label": "Email or phone",
+          "value": "jordan@example.com",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -620.453125,
+            "width": 324,
+            "height": 40,
+            "bottom": -580.453125
+          }
+        },
+        {
+          "label": "Size S",
+          "value": "10",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -498.859375,
+            "width": 324,
+            "height": 40,
+            "bottom": -458.859375
+          }
+        },
+        {
+          "label": "Size M",
+          "value": "10",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -418.859375,
+            "width": 324,
+            "height": 40,
+            "bottom": -378.859375
+          }
+        },
+        {
+          "label": "Size L",
+          "value": "6",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -338.859375,
+            "width": 324,
+            "height": 40,
+            "bottom": -298.859375
+          }
+        },
+        {
+          "label": "Requested total",
+          "value": "25",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -258.859375,
+            "width": 324,
+            "height": 40,
+            "bottom": -218.859375
+          }
+        },
+        {
+          "label": "Deadline",
+          "value": "2099-09-28",
+          "fontSize": "16px",
+          "border": "1px solid rgb(139, 129, 116)",
+          "background": "rgb(247, 244, 238)",
+          "box": {
+            "x": 33,
+            "y": -52.46875,
+            "width": 324,
+            "height": 40,
+            "bottom": -12.46875
+          }
+        }
+      ],
+      "messages": [
+        {
+          "text": "AI proposal awaiting your review",
+          "box": {
+            "x": 33,
+            "y": -862.84375,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": -824.453125
+          }
+        },
+        {
+          "text": "The inquiry changed. Extract it again or start manual entry for the current inquiry.",
+          "box": {
+            "x": 33,
+            "y": -824.453125,
+            "width": 324,
+            "height": 80,
+            "bottom": -744.453125
+          }
+        },
+        {
+          "text": "26 assigned / 25 requested",
+          "box": {
+            "x": 33,
+            "y": -210.859375,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": -172.46875
+          }
+        },
+        {
+          "text": "The size counts add up to 26. The request says 25.",
+          "box": {
+            "x": 33,
+            "y": -180.46875,
+            "width": 324,
+            "height": 80,
+            "bottom": -100.46875
+          }
+        },
+        {
+          "text": "Customer wrote \"Needed September 28\"",
+          "box": {
+            "x": 33,
+            "y": -8.46875,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": 29.921875
+          }
+        },
+        {
+          "text": "Original inquiry for this draft",
+          "box": {
+            "x": 50,
+            "y": 89.921875,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 128.3125
+          }
+        },
+        {
+          "text": "Customer name",
+          "box": {
+            "x": 50,
+            "y": 265.875,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 304.265625
+          }
+        },
+        {
+          "text": "Email or phone",
+          "box": {
+            "x": 50,
+            "y": 374.65625,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 413.046875
+          }
+        },
+        {
+          "text": "Size quantities",
+          "box": {
+            "x": 50,
+            "y": 483.4375,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 521.828125
+          }
+        },
+        {
+          "text": "Deadline",
+          "box": {
+            "x": 50,
+            "y": 592.21875,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 630.609375
+          }
+        },
+        {
+          "text": "Requested quantity",
+          "box": {
+            "x": 50,
+            "y": 701,
+            "width": 290,
+            "height": 38.390625,
+            "bottom": 739.390625
+          }
+        },
+        {
+          "text": "0 missing fields · 0 unresolved issues",
+          "box": {
+            "x": 33,
+            "y": 826.78125,
+            "width": 324,
+            "height": 38.390625,
+            "bottom": 865.171875
+          }
+        }
+      ],
+      "documentOverflow": false,
+      "reviewOverflows": []
+    }
+  },
+  "browserErrors": [],
+  "externalRequests": [
+    "blob:http://localhost:8502/4904d567-0301-4bd3-8417-74259bf0f96c",
+    "blob:http://localhost:8503/091d4779-26da-4a05-9840-578649366838"
+  ]
+}

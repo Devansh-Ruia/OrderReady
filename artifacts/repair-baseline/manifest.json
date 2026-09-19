@@ -1,0 +1,30 @@
+{
+  "head": "bdeb1af02f8bae7178c3114fe250706769ec4456",
+  "branch": "fix/review-form-layout",
+  "status": " M app.py\n M tests/test_unit.py\n?? .streamlit/\n?? artifacts/\n?? assets/\n?? intro.py\n?? tests/conftest.py\n?? tests/test_frontend.py\n?? ui_state.py\n",
+  "files": {
+    ".streamlit/config.toml": "b9cf0c44bccb0fb288ffd0c8e2b34e2374824b5fc8906fdefb738a1a5f9b321d",
+    "app.py": "2f39eabf43784a2226365b75e4feb4c751f58d6ef67681ea63c85937bd94fdb6",
+    "artifacts/HANDOFF.md": "fc2715c9f9615bf99e9ed818af72060fb60d340cf8d124b8e81fc4260b8bb501",
+    "artifacts/after-desktop-1350.png": "a36cf90a281ad1c0c94ac054b9c0c70eb49b33acabb6d3d732ddeb29d4563f7b",
+    "artifacts/after-mobile-390.png": "969438caeafbe176a0c2f0ad45e1c8341a116611ee42ad7256462c85e2d6575c",
+    "artifacts/after-zoom-200.png": "dc970654337bd7843098b5417a29e57c40254a44bd3ee0877b904132000677c2",
+    "artifacts/browser-verification.cjs": "c4f047a78c8baa02430ff269aa7bf226546566f0fd45f859860f2b4bce11cb31",
+    "artifacts/browser-verification.json": "19f85608e0cca1b010e7aa9fd1d865371550db63d2e55924d2f2ec12f646771c",
+    "artifacts/desktop-review.png": "84e39e5cb38ccaad71c59ba2f595e4a22d78e851ac1643cf7d12523bdc33fe61",
+    "artifacts/manual-intake.txt": "3181e464767624228c7e71c2240280212433c1684c0348b09121f708fa2e308c",
+    "artifacts/orderready-after-lighthouse-desktop.report.html": "a528dbcbd4987eb93f74ab685b2fc7443e321533bd8095f8e0f207a35b1c68cb",
+    "artifacts/orderready-after-lighthouse-desktop.report.json": "8126a1190a87a4a17cebf62b7d13fdb5d276d0070a08675aadbeb218566169f1",
+    "artifacts/repair-before-desktop-1440.png": "777a972f5d470e45c605bfd69fd210f1ea92a3d5fe13aa81fa409b55dcdfa159",
+    "artifacts/repair-before-desktop-css-disabled.png": "4ab0389d1b4dce7e4c90e713ee2b5e2a80000e04a4032efc25398a0c55566bb4",
+    "artifacts/repair-before-mobile-390.png": "66052090f47cb73246fdcde915ac4a95e76e389894814b25dae77676a7c72c86",
+    "artifacts/repair-layout-diagnosis.json": "0c6bdfa02ceeb964ee4108902158c9848c1f371a4bcf82f903d982a6ede6a943",
+    "assets/GSAP-LICENSE.txt": "3ab6a9e113ab0ef457aae8528260447afd71056530b5b4b69f084bd616199f62",
+    "assets/gsap-3.13.0.min.js": "96c01b81f44a3290e2b4532f55e2c9534b2adc43273a19f3756b2cb41f0fd0b6",
+    "intro.py": "e2f7f0ae9671b4302ba8e9f0674ebebd7bd1fd84b25ea0e0ff249b390c3b1db0",
+    "tests/conftest.py": "459e084aab723d594251f7c6ba78d94c5d0b1c4c4565bd7c6f93d376af0ec821",
+    "tests/test_frontend.py": "68222e382bd3abec48050c35659a9131b46e4a49df7a7f4da2a85b2962334fcc",
+    "tests/test_unit.py": "633ff17fca6b931911bd703efdee2c921935946b8e9128dff59b967578a7a3a0",
+    "ui_state.py": "1745d25e0e71e88f19712d4146d52f48d463d6bf5eeed92a04eb9300275f3cd5"
+  }
+}

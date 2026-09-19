@@ -1,0 +1,465 @@
+"""Offline regressions for the active evidence-based Streamlit workflow.
+
+Extraction responses in this module are explicitly mocked. No live AI is used.
+"""
+
+from copy import deepcopy
+from datetime import date, timedelta
+from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
+from streamlit.testing.v1 import AppTest
+
+import fixtures
+import model
+from ui_state import CACHE_TTL, cache_get, cache_put, extraction_key
+
+
+APP = Path(__file__).resolve().parents[1] / "app.py"
+DEADLINE = (date.today() + timedelta(days=30)).isoformat()
+SOURCE = f"Anya, anya@example.test, 25 shirts, 10 S, 10 M, 5 L, needed {DEADLINE}."
+
+
+def proposal(**values):
+    fields = dict(customer_name="Anya", contact="anya@example.test",
+                  sizes={"S": 10, "M": 10, "L": 5}, deadline=DEADLINE, stated_total=25)
+    fields.update(values)
+    return {"fields": {name: {"value": value, "evidence": str(value)}
+                       for name, value in fields.items()},
+            "ambiguities": [], "dropped": [], "error": None}
+
+
+def new_app():
+    at = AppTest.from_file(str(APP), default_timeout=15).run()
+    assert not at.exception
+    return at
+
+
+def start_manual(at, source=SOURCE):
+    at.text_area(key="source_text").set_value(source).run()
+    at.button(key="manual").click().run()
+    assert not at.exception
+    return at
+
+
+def fill_fields(at, **changes):
+    values = dict(customer_name="Anya", contact="anya@example.test", size_S="10",
+                  size_M="10", size_L="5", deadline=DEADLINE, stated_total="25")
+    values.update(changes)
+    for field, value in values.items():
+        at.text_input(key=f"edit_{field}").set_value(value)
+    at.run()
+    assert not at.exception
+
+
+def prepare(at):
+    at.checkbox(key="reviewed").check().run()
+    assert not at.button(key="prepare").disabled
+    at.button(key="prepare").click().run()
+    assert not at.exception
+    assert len(at.get("download_button")) == 1
+    return at.session_state.prepared
+
+
+def extract(monkeypatch, extracted=None, source=SOURCE):
+    mocked = Mock(return_value=deepcopy(extracted if extracted is not None else proposal()))
+    monkeypatch.setattr(model, "extract_order", mocked)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "offline-placeholder")
+    at = new_app()
+    at.text_area(key="source_text").set_value(source).run()
+    at.button(key="extract").click().run()
+    assert not at.exception
+    assert mocked.call_count == 1
+    return at, mocked
+
+
+def resolve_all(at):
+    keys = [item.key for item in at.checkbox if item.key != "reviewed"]
+    for key in keys:
+        at.checkbox(key=key).check().run()
+
+
+def test_manual_start_is_explicit_and_editors_are_blank():
+    at = new_app()
+    assert at.session_state.mode is None
+    assert not at.text_input
+    assert any("unavailable" in item.value.lower() for item in at.warning)
+    at.text_area(key="source_text").set_value(SOURCE).run()
+    assert at.session_state.mode is None
+    at.button(key="manual").click().run()
+    assert at.session_state.mode == "manual"
+    assert all(item.value == "" for item in at.text_input)
+    assert at.button(key="prepare").disabled
+
+
+def test_manual_export_preserves_source_and_active_ticket_contract():
+    at = start_manual(new_app())
+    fill_fields(at)
+    prepared = prepare(at)
+    assert "Customer : Anya" in prepared["ticket"]
+    assert "TOTAL    : 25 shirts" in prepared["ticket"]
+    assert SOURCE in prepared["ticket"]
+    assert prepared["json"]["original_inquiry"] == SOURCE
+    assert prepared["json"]["sizes"] == {"S": 10, "M": 10, "L": 5}
+    assert all(item.disabled for item in at.text_input)
+    assert at.text_area(key="source_text").disabled
+    assert at.checkbox(key="reviewed").disabled
+    at.button(key="edit_intake").click().run()
+    assert not at.get("download_button")
+    assert not at.checkbox(key="reviewed").value
+    assert at.text_input(key="edit_size_S").value == "10"
+
+
+def test_malformed_values_persist_and_edits_invalidate_acknowledgment():
+    at = start_manual(new_app())
+    fill_fields(at, size_M="1.5")
+    at.run()
+    assert at.text_input(key="edit_size_M").value == "1.5"
+    assert at.text_input(key="edit_customer_name").value == "Anya"
+    assert at.button(key="prepare").disabled
+    assert any("whole number" in item.value for item in at.error)
+    at.text_input(key="edit_size_M").set_value("10").run()
+    at.checkbox(key="reviewed").check().run()
+    at.text_input(key="edit_customer_name").set_value("Anya Chen").run()
+    assert not at.checkbox(key="reviewed").value
+
+
+@pytest.mark.parametrize("missing", ["size_S", "size_M", "size_L"])
+def test_every_size_requires_an_explicit_entry(missing):
+    at = start_manual(new_app())
+    fill_fields(at, **{missing: ""})
+    at.checkbox(key="reviewed").check().run()
+    assert at.text_input(key=f"edit_{missing}").value == ""
+    assert at.button(key="prepare").disabled
+    assert not at.get("download_button")
+
+
+def test_explicit_zero_and_optional_unknown_total_can_export():
+    at = start_manual(new_app())
+    fill_fields(at, size_L="0", stated_total="")
+    prepared = prepare(at)
+    assert prepared["json"]["sizes"]["L"] == 0
+    assert prepared["json"]["total_quantity"] == 20
+    assert at.text_input(key="edit_stated_total").value == ""
+
+
+@pytest.mark.parametrize("deadline", ["September 28", "2026-09", "2026-02-30"])
+def test_incomplete_or_invalid_deadline_blocks_preparation(deadline):
+    at = start_manual(new_app())
+    fill_fields(at, deadline=deadline)
+    at.checkbox(key="reviewed").check().run()
+    assert at.button(key="prepare").disabled
+
+
+def test_extracted_missing_size_stays_unknown(monkeypatch):
+    at, _ = extract(monkeypatch, proposal(sizes={"S": 10, "M": 10}, stated_total=20))
+    assert at.text_input(key="edit_size_L").value == ""
+    at.checkbox(key="reviewed").check().run()
+    assert at.button(key="prepare").disabled
+
+
+@pytest.mark.parametrize("field", ["customer_name", "contact", "deadline", "size_L"])
+def test_clearing_extracted_fields_never_restores_hidden_values(monkeypatch, field):
+    at, _ = extract(monkeypatch)
+    original = deepcopy(at.session_state.history)
+    at.text_input(key=f"edit_{field}").set_value("").run()
+    at.checkbox(key="reviewed").check().run()
+    assert at.text_input(key=f"edit_{field}").value == ""
+    assert at.button(key="prepare").disabled
+    assert at.session_state.history == original
+
+
+def test_clearing_optional_total_removes_extracted_mismatch(monkeypatch):
+    at, _ = extract(monkeypatch, proposal(stated_total=30))
+    assert at.button(key="prepare").disabled
+    at.text_input(key="edit_stated_total").set_value("").run()
+    prepared = prepare(at)
+    assert prepared["json"]["total_quantity"] == 25
+    assert at.text_input(key="edit_stated_total").value == ""
+    assert at.session_state.history[0]["extraction"]["fields"]["stated_total"]["value"] == 30
+
+
+def test_contradiction_requires_correction_and_issue_resolution(monkeypatch):
+    original = proposal(stated_total=30, deadline=None)
+    original["ambiguities"] = ["Confirm whether 30 shirts or the size sum of 25 is correct.",
+                               "Which year is the deadline?", "Confirm the artwork with the customer."]
+    at, mocked = extract(monkeypatch, original)
+    assert at.text_input(key="edit_stated_total").value == "30"
+    assert at.button(key="prepare").disabled
+    saved = deepcopy(at.session_state.history)
+    fill_fields(at)
+    at.checkbox(key="reviewed").check().run()
+    assert at.button(key="prepare").disabled
+    resolve_all(at)
+    assert not at.checkbox(key="reviewed").value
+    prepared = prepare(at)
+    assert prepared["json"]["total_quantity"] == 25
+    assert at.session_state.history == saved
+    assert mocked.call_count == 1
+
+
+def test_issue_resolution_identity_survives_display_reordering(monkeypatch):
+    original = proposal()
+    original["ambiguities"] = ["Confirm the artwork.", "Confirm the delivery address."]
+    at, _ = extract(monkeypatch, original)
+    issue = next(item for item in at.checkbox if "artwork" in item.label)
+    resolved_key = issue.key
+    at.checkbox(key=resolved_key).check().run()
+    changed = deepcopy(at.session_state.extraction)
+    changed["ambiguities"].reverse()
+    at.session_state.extraction = changed
+    at.run()
+    assert at.checkbox(key=resolved_key).value is True
+    unresolved = next(item for item in at.checkbox if "delivery address" in item.label)
+    assert unresolved.value is False
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("private inquiry and credential details"),
+                                     {"fields": {}, "ambiguities": [], "dropped": [],
+                                      "error": "HTTP 429 private provider response"}])
+def test_failed_extraction_preserves_edits_and_history_and_cleans_pending(monkeypatch, failure):
+    at, mocked = extract(monkeypatch, source="Inquiry A")
+    at.text_input(key="edit_customer_name").set_value("Corrected name").run()
+    saved = deepcopy(at.session_state.history)
+    at.text_area(key="source_text").set_value("Inquiry B").run()
+    assert at.session_state.stale
+    if isinstance(failure, Exception):
+        mocked.side_effect = failure
+    else:
+        mocked.return_value = failure
+    at.button(key="extract").click().run()
+    assert not at.exception
+    assert at.text_input(key="edit_customer_name").value == "Corrected name"
+    assert at.session_state.draft_source == "Inquiry A"
+    assert at.session_state.history == saved
+    assert at.session_state.pending is None
+    assert at.session_state.stale and not at.session_state.reviewed
+    displayed = " ".join(item.value for item in [*at.warning, *at.error, *at.caption])
+    assert "private" not in displayed
+    assert at.button(key="retry")
+    at.run()
+    assert mocked.call_count == 2
+    at.button(key="retry").click().run()
+    assert mocked.call_count == 3
+    at.button(key="manual").click().run()
+    assert at.session_state.mode == "manual" and not at.session_state.stale
+    assert all(item.value == "" for item in at.text_input)
+    assert at.session_state.history == saved
+
+
+def test_response_for_stale_source_revision_is_discarded(monkeypatch):
+    import streamlit as st
+
+    def response_after_source_changes(source):
+        st.session_state.source_revision += 1
+        return proposal()
+
+    mocked = Mock(side_effect=response_after_source_changes)
+    monkeypatch.setattr(model, "extract_order", mocked)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "offline-placeholder")
+    at = new_app()
+    at.text_area(key="source_text").set_value(SOURCE).run()
+    at.button(key="extract").click().run()
+    assert not at.exception
+    assert mocked.call_count == 1
+    assert at.session_state.pending is None
+    assert at.session_state.mode is None
+    assert at.session_state.history == []
+    at.run()
+    assert mocked.call_count == 1
+
+
+def test_switching_to_manual_keeps_same_source_issues(monkeypatch):
+    original = proposal()
+    original["ambiguities"] = ["Confirm the artwork."]
+    at, _ = extract(monkeypatch, original)
+    at.button(key="manual").click().run()
+    assert at.session_state.mode == "manual"
+    fill_fields(at)
+    at.checkbox(key="reviewed").check().run()
+    assert at.button(key="prepare").disabled
+
+
+@pytest.mark.parametrize("key,value", [("source_text", "changed source"),
+                                       ("edit_customer_name", "Another customer"),
+                                       ("mode", "live_ai"), ("reviewed", False)])
+def test_prepared_snapshot_rejects_changes_without_callbacks(key, value):
+    at = start_manual(new_app())
+    fill_fields(at)
+    prepare(at)
+    at.session_state[key] = value
+    at.run()
+    assert not at.exception
+    assert at.session_state.prepared is None
+    assert not at.get("download_button")
+    assert at.session_state.reviewed is False
+
+
+def test_reruns_review_and_prepared_download_do_not_repeat_extraction(monkeypatch):
+    at, mocked = extract(monkeypatch)
+    at.run()
+    prepared = prepare(at)
+    at.run()
+    assert at.session_state.prepared == prepared
+    assert mocked.call_count == 1
+    assert len(at.get("download_button")) == 1
+
+
+@pytest.mark.parametrize("target", ["widget", "map"])
+def test_prepared_snapshot_rechecks_issue_resolution_without_callback(monkeypatch, target):
+    original = proposal()
+    original["ambiguities"] = ["Confirm the artwork."]
+    at, _ = extract(monkeypatch, original)
+    issue_key = next(item.key for item in at.checkbox if item.key != "reviewed")
+    resolve_all(at)
+    prepare(at)
+    if target == "widget":
+        at.session_state[issue_key] = False
+    else:
+        at.session_state.issue_resolutions[issue_key] = False
+    at.run()
+    assert not at.exception
+    assert at.session_state.prepared is None
+    assert not at.get("download_button")
+
+
+def test_cache_reuse_and_fresh_request_are_explicit(monkeypatch):
+    at, mocked = extract(monkeypatch)
+    at.button(key="extract").click().run()
+    assert not at.exception
+    assert mocked.call_count == 1
+    displayed = " ".join(item.value for item in [*at.info, *at.success, *at.caption])
+    assert "Reused this session's extraction. No new AI request was made." in displayed
+    at.button(key="fresh").click().run()
+    assert not at.exception
+    assert mocked.call_count == 2
+
+
+def test_reset_clears_inquiry_and_session_cache(monkeypatch):
+    at, _ = extract(monkeypatch)
+    assert at.session_state.extraction_cache
+    at.button(key="reset").click().run()
+    assert not at.exception
+    assert at.text_area(key="source_text").value == ""
+    assert at.session_state.mode is None
+    assert at.session_state.history == []
+    assert at.session_state.extraction_cache == {}
+
+
+def test_samples_use_only_input_and_need_explicit_start(monkeypatch):
+    monkeypatch.setattr(fixtures, "CASES", [
+        {"id": "first", "text": "Inquiry A", "expected": {"customer_name": "Never used"}},
+        {"id": "second", "text": SOURCE},
+    ])
+    at = new_app()
+    at.selectbox(key="sample_choice").set_value(1).run()
+    assert at.text_area(key="source_text").value == ""
+    at.button(key="load_sample").click().run()
+    assert at.text_area(key="source_text").value == SOURCE
+    assert at.session_state.mode is None
+    at.button(key="manual").click().run()
+    assert all(item.value == "" for item in at.text_input)
+    fill_fields(at)
+    prepare(at)
+    assert at.selectbox(key="sample_choice").disabled
+    assert at.button(key="load_sample").disabled
+
+
+def test_cache_is_session_owned_and_copies_original_proposals():
+    first_session, second_session = {}, {}
+    original = proposal()
+    cache_put(first_session, "key", original, now=10)
+    original["fields"]["customer_name"]["value"] = "Changed caller copy"
+    retrieved = cache_get(first_session, "key", now=11)
+    assert retrieved["fields"]["customer_name"]["value"] == "Anya"
+    retrieved["fields"]["customer_name"]["value"] = "Changed retrieved copy"
+    assert cache_get(first_session, "key", now=12)["fields"]["customer_name"]["value"] == "Anya"
+    assert cache_get(second_session, "key", now=12) is None
+
+
+def test_cache_expires_from_insertion_and_evicts_oldest():
+    cache = {}
+    cache_put(cache, "old", proposal(), now=0)
+    assert cache_get(cache, "old", now=CACHE_TTL - 1)
+    assert cache_get(cache, "old", now=CACHE_TTL) is None
+    for index in range(6):
+        cache_put(cache, str(index), proposal(), now=index)
+    assert len(cache) == 5
+    assert "0" not in cache
+    assert cache_get(cache, "5", now=10)
+    failed = proposal()
+    failed["error"] = "Failed"
+    cache_put(cache, "failure", failed, now=10)
+    assert "failure" not in cache
+
+
+def test_cache_key_covers_exact_source_and_all_extraction_configuration():
+    args = [SOURCE, "provider", "model", {"max_tokens": 1000}, "prompt-schema-hash"]
+    baseline = extraction_key(*args)
+    variants = [SOURCE + " ", "another-provider", "another-model", {"max_tokens": 999}, "new-schema"]
+    for index, variant in enumerate(variants):
+        changed = args.copy()
+        changed[index] = variant
+        assert extraction_key(*changed) != baseline
+
+
+
+class Session(dict):
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+
+
+@pytest.fixture
+def callback_app(monkeypatch):
+    import app
+    monkeypatch.setattr(app.st, "session_state", Session())
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "offline-placeholder")
+    app.initialize()
+    app.st.session_state.source_text = SOURCE
+    return app
+
+
+def test_duplicate_queue_and_consumption_make_one_request(callback_app, monkeypatch):
+    app = callback_app
+    mocked = Mock(return_value=proposal())
+    monkeypatch.setattr(app, "extract_order", mocked)
+    app.run_extraction()
+    intent = app.st.session_state.pending
+    app.run_extraction()
+    assert app.st.session_state.pending is intent
+    assert app.st.session_state.request_counter == 1
+    mocked.assert_not_called()
+    app.consume_pending()
+    app.consume_pending()
+    assert mocked.call_count == 1
+    assert app.st.session_state.pending is None
+    assert len(app.st.session_state.history) == 1
+
+
+def test_preparation_callback_rechecks_missing_size(callback_app):
+    app = callback_app
+    app.begin_draft(proposal(), "live_ai")
+    app.st.session_state.edit_size_L = ""
+    app.st.session_state.reviewed = True
+    app.prepare_ticket()
+    assert app.st.session_state.prepared is None
+    assert app.st.session_state.reviewed is False
+
+
+def test_cache_replacement_requires_explicit_action_when_edits_exist(callback_app, monkeypatch):
+    app = callback_app
+    mocked = Mock(side_effect=AssertionError("Cache reuse must not request AI"))
+    monkeypatch.setattr(app, "extract_order", mocked)
+    original = proposal()
+    cache_put(app.st.session_state.extraction_cache, app.cache_key(SOURCE), original)
+    app.begin_draft(original, "live_ai")
+    app.st.session_state.edit_customer_name = "Human correction"
+    app.run_extraction()
+    assert app.st.session_state.pending is None
+    assert app.st.session_state.edit_customer_name == "Human correction"
+    app.run_extraction(replace=True)
+    app.consume_pending()
+    assert app.st.session_state.edit_customer_name == "Anya"
+    assert app.st.session_state.cache_notice == "Reused this session's extraction. No new AI request was made."
+    mocked.assert_not_called()

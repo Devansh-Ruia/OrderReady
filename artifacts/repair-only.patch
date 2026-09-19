@@ -1,0 +1,255 @@
+--- repair-baseline/app.py
++++ app.py
+@@ -318,11 +318,11 @@
+ 
+ def render_evidence(name):
+     field = st.session_state.extraction["fields"].get(name, {})
+-    if field.get("evidence"):
+-        st.caption("From the inquiry")
+-        st.text(field["evidence"])
+-    elif st.session_state.mode == "live_ai":
+-        st.caption("Not stated in the inquiry")
++    st.caption(FIELD_LABEL[name])
++    if field.get("evidence") is not None:
++        st.code(f"\n{field['evidence']}\n", language=None, wrap_lines=True)
++    else:
++        st.text("No source evidence recorded.")
+ 
+ 
+ def render_review(locked):
+@@ -335,38 +335,81 @@
+     st.caption("Manual entry" if state.mode == "manual" else "AI proposal awaiting your review")
+     if state.stale:
+         st.error("The inquiry changed. Extract it again or start manual entry for the current inquiry.")
+-    st.text_input("Customer name", key="edit_customer_name", disabled=locked, on_change=invalidate)
+-    render_evidence("customer_name")
+-    st.text_input("Email or phone", key="edit_contact", disabled=locked, on_change=invalidate)
+-    render_evidence("contact")
+-    sizes_label, size_help = st.columns([3, 1])
+-    sizes_label.markdown("**Size quantities**")
+-    with size_help.popover("Size help"):
+-        st.write("Enter every size. Use 0 when none are needed. A blank quantity stays unknown.")
+-    for size, column in zip(SIZES, st.columns(3)):
+-        column.text_input(f"Size {size}", key=f"edit_size_{size}", disabled=locked, on_change=invalidate)
+-    render_evidence("sizes")
+-    total, deadline = st.columns(2)
+-    total.text_input("Requested quantity", key="edit_stated_total", placeholder="Unknown", disabled=locked, on_change=invalidate)
+-    deadline.text_input("Deadline", key="edit_deadline", placeholder="YYYY-MM-DD", disabled=locked, on_change=invalidate)
+-    with st.popover("Quantity and deadline help"):
+-        st.write("Requested quantity is optional. Leave it blank if the customer did not give a total. A deadline needs a complete date including the year and at least seven days of lead time.")
+-    render_evidence("stated_total")
+-    render_evidence("deadline")
+     result, errors, questions, unresolved, _ = review_status()
+     requested = result["fields"]["stated_total"]["value"]
+-    one, two = st.columns(2)
+-    one.metric("Requested quantity", "Unknown" if requested is None else requested)
+-    two.metric("Supplied size sum", "Unknown" if result["total"] is None else result["total"])
+-    missing = list(result["missing"])
++    messages = {name: [] for name in ("customer_name", "contact", "sizes", "deadline", None)}
++    for error in errors + result["blocks"]:
++        topic = _topic(error)
++        if topic == "total_mismatch" or error.startswith("Requested quantity"):
++            topic = "sizes"
++        # Keep validator messages untouched for issue identity and deduplication.
++        display = error.replace(" — ", ". ")
++        if error == f"customer said {requested} shirts, sizes add up to {result['total']}":
++            display = f"The size counts add up to {result['total']}. The request says {requested}."
++        messages[topic if topic in messages else None].append(display)
++
++    def show_errors(topic):
++        for message in messages[topic]:
++            st.error(message)
++
+     missing_sizes = [s for s in SIZES if not state[f"edit_size_{s}"].strip()]
+-    if missing_sizes:
+-        st.caption("Enter a quantity for " + ", ".join(missing_sizes) + ". Use 0 when none are needed.")
+-    st.caption(f"{len(missing)} missing fields · {len(unresolved)} unresolved issues")
+-    for error in errors + result["blocks"]:
+-        st.error(error.replace(" — ", ". "))
+-    if missing:
+-        st.warning("Still needed · " + ", ".join(missing))
++    with st.container(gap=20):
++        for name, missing_label, column in zip(
++                ("customer_name", "contact"), ("customer name", "email or phone"),
++                st.columns(2, gap=12, wrap=True)):
++            with column, st.container(gap=4):
++                st.text_input(FIELD_LABEL[name], key=f"edit_{name}", disabled=locked, on_change=invalidate)
++                show_errors(name)
++                if missing_label in result["missing"]:
++                    st.warning(f"Enter {missing_label}.")
++
++        with st.container(gap=8):
++            st.markdown("**Size quantities**")
++            columns = st.columns(4, gap=12, wrap=True)
++            for size, column in zip(SIZES, columns):
++                column.text_input(f"Size {size}", key=f"edit_size_{size}", disabled=locked,
++                                  on_change=invalidate,
++                                  help="Enter every size. Use 0 when none are needed. A blank quantity stays unknown.")
++            columns[-1].text_input("Requested total", key="edit_stated_total", placeholder="Unknown",
++                                   disabled=locked, on_change=invalidate,
++                                   help="Optional. Leave blank if the customer did not give a total.")
++            assigned = f"{result['total']} assigned" if result["total"] is not None else "Assigned total unavailable"
++            if missing_sizes:
++                assigned = "Quantities missing: " + ", ".join(missing_sizes)
++            requested_summary = f"{requested} requested" if requested is not None else "Requested total unknown"
++            if any(error.startswith("Requested quantity") for error in errors):
++                requested_summary = "Requested total invalid"
++            st.caption(f"{assigned} / {requested_summary}")
++            show_errors("sizes")
++            if missing_sizes:
++                st.warning("Enter a quantity for " + ", ".join(missing_sizes) + ". Use 0 when none are needed.")
++            elif "size breakdown (S/M/L)" in result["missing"] and not messages["sizes"]:
++                st.warning("Enter a valid quantity for every size.")
++
++        with st.container(gap=4):
++            st.text_input("Deadline", key="edit_deadline", placeholder="YYYY-MM-DD", disabled=locked,
++                          on_change=invalidate,
++                          help="Enter a complete date including the year and at least seven days of lead time.")
++            evidence = state.extraction["fields"].get("deadline", {}).get("evidence")
++            if evidence is not None:
++                st.caption(f'Customer wrote "{evidence}"')
++            show_errors("deadline")
++            if "deadline" in result["missing"] and not messages["deadline"]:
++                st.warning("Enter a complete deadline including the year.")
++
++        with st.container(gap=8):
++            show_errors(None)
++            mapped_missing = {"customer name", "email or phone", "size breakdown (S/M/L)", "deadline"}
++            for missing in result["missing"]:
++                if missing not in mapped_missing:
++                    st.warning("Still needed · " + missing)
++            with st.expander("View source details"):
++                st.caption("Original inquiry for this draft")
++                # st.code removes one surrounding newline; add them to preserve the source exactly.
++                st.code(f"\n{state.draft_source}\n", language=None, wrap_lines=True)
++                for name in FIELDS:
++                    render_evidence(name)
++    st.caption(f"{len(result['missing'])} missing fields · {len(unresolved)} unresolved issues")
+     for question in dedupe_questions(result["blocks"], questions):
+         key = issue_key(question)
+         state[key] = state.issue_resolutions.get(key, False)
+@@ -396,7 +439,7 @@
+     .st-key-inquiry,.st-key-review,.st-key-ticket {background:#fff; border:1px solid #D5CFC4; border-radius:12px; padding:24px;}
+     .st-key-workspace label p {font-size:14px;}
+     .st-key-workspace [data-testid="stCaptionContainer"],.st-key-header [data-testid="stCaptionContainer"] {opacity:1;} .st-key-workspace [data-testid="stCaptionContainer"] p,.st-key-header [data-testid="stCaptionContainer"] p {color:#625C53; opacity:1;}
+-    .st-key-workspace [data-testid="stMetricValue"] {font-size:1.5rem;}
++    .st-key-review input {font-size:16px;}
+     .st-key-header {margin-bottom:8px;}
+     .st-key-loading .placeholder {height:40px; background:#E9E4DC; border-radius:6px; margin:8px 0 24px;}
+     @media(max-width:640px) {.st-key-inquiry,.st-key-review,.st-key-ticket {padding:16px;}}
+--- repair-baseline/.streamlit/config.toml
++++ .streamlit/config.toml
+@@ -2,7 +2,9 @@
+ base = "light"
+ primaryColor = "#B6491D"
+ backgroundColor = "#F7F4EE"
+-secondaryBackgroundColor = "#FFFFFF"
++secondaryBackgroundColor = "#F7F4EE"
++showWidgetBorder = true
++borderColor = "#8B8174"
+ textColor = "#25231F"
+ font = "sans serif"
+ baseFontSize = 16
+--- repair-baseline/tests/test_frontend.py
++++ tests/test_frontend.py
+@@ -463,3 +463,100 @@
+     assert app.st.session_state.edit_customer_name == "Anya"
+     assert app.st.session_state.cache_notice == "Reused this session's extraction. No new AI request was made."
+     mocked.assert_not_called()
++
++
++
++def review_items(at):
++    return [item for item in at.get_by_key("review")
++            if item.type in {"text_input", "caption", "error", "warning"}]
++
++
++def test_review_groups_customer_fields_and_quantities_with_native_help():
++    at = start_manual(new_app())
++    review = at.get_by_key("review")
++    assert [[field.key for field in column.text_input] for column in review.columns] == [
++        ["edit_customer_name"], ["edit_contact"], ["edit_size_S"],
++        ["edit_size_M"], ["edit_size_L"], ["edit_stated_total"]]
++    assert at.text_input(key="edit_stated_total").label == "Requested total"
++    for key in ("size_S", "size_M", "size_L", "stated_total", "deadline"):
++        assert at.text_input(key=f"edit_{key}").help
++    assert not review.get("metric")
++    assert not review.get("popover")
++    items = review_items(at)
++    for key, message in (("edit_customer_name", "Enter customer name."),
++                         ("edit_contact", "Enter email or phone.")):
++        index = next(i for i, item in enumerate(items) if item.key == key)
++        assert items[index + 1].value == message
++
++
++def test_mismatch_and_deadline_failures_are_adjacent_and_still_block_acknowledgment():
++    at = start_manual(new_app())
++    fill_fields(at, stated_total="30", deadline="September 28")
++    items = review_items(at)
++    total_index = next(i for i, item in enumerate(items) if item.key == "edit_stated_total")
++    assert items[total_index + 1].value == "25 assigned / 30 requested"
++    assert items[total_index + 2].value == "The size counts add up to 25. The request says 30."
++    deadline_index = next(i for i, item in enumerate(items) if item.key == "edit_deadline")
++    assert "not a real date" in items[deadline_index + 1].value
++    at.checkbox(key="reviewed").check().run()
++    assert at.button(key="prepare").disabled
++    assert not at.get("download_button")
++
++
++@pytest.mark.parametrize("changes,summary,error", [
++    ({"size_L": ""}, "Quantities missing: L / 25 requested", "Enter a quantity for L."),
++    ({"size_L": "0", "stated_total": ""}, "20 assigned / Requested total unknown", None),
++    ({"size_M": "no"}, "Assigned total unavailable / 25 requested", "Size M must be a whole number."),
++    ({"stated_total": "no"}, "25 assigned / Requested total invalid", "Requested quantity must be a whole number."),
++    ({"size_S": "-1"}, "Assigned total unavailable / 25 requested", "size counts cannot be negative"),
++])
++def test_quantity_summary_distinguishes_missing_invalid_and_explicit_zero(changes, summary, error):
++    at = start_manual(new_app())
++    fill_fields(at, **changes)
++    items = review_items(at)
++    index = next(i for i, item in enumerate(items) if item.value == summary)
++    if error:
++        assert error in items[index + 1].value
++    assert not any(item.value.startswith('Customer wrote "') for item in at.caption)
++
++
++def test_source_details_keep_exact_original_evidence_and_stale_provenance(monkeypatch):
++    original = proposal(deadline=None, stated_total=30)
++    original["fields"]["deadline"]["evidence"] = "Needed September 28"
++    source = "\n  Original inquiry\nNeeded September 28  \n"
++    at, _ = extract(monkeypatch, original, source=source)
++    details = next(item for item in at.expander if item.label == "View source details")
++    assert not details.proto.expanded
++    assert [item.value for item in details.code] == [source] + [
++        original["fields"][name]["evidence"] for name in model.FIELDS]
++    items = review_items(at)
++    index = next(i for i, item in enumerate(items) if item.key == "edit_deadline")
++    assert items[index + 1].value == 'Customer wrote "Needed September 28"'
++    fill_fields(at)
++    at.text_area(key="source_text").set_value("A different inquiry").run()
++    details = next(item for item in at.expander if item.label == "View source details")
++    assert details.code[0].value == source
++    assert at.session_state.extraction == original
++    assert at.checkbox(key="reviewed").disabled
++
++
++def test_unmapped_validation_messages_are_visible_without_mutating_result(monkeypatch):
++    import order_logic
++    original_validate = order_logic.validate
++    returned = []
++
++    def with_unmapped_messages(*args, **kwargs):
++        result = original_validate(*args, **kwargs)
++        result["blocks"].append("Production approval unavailable.")
++        result["missing"].append("delivery method")
++        result["ok"] = False
++        returned.append((result, deepcopy(result)))
++        return result
++
++    monkeypatch.setattr(order_logic, "validate", with_unmapped_messages)
++    at = start_manual(new_app())
++    fill_fields(at)
++    assert any(item.value == "Production approval unavailable." for item in at.error)
++    assert any(item.value == "Still needed · delivery method" for item in at.warning)
++    assert all(result == saved for result, saved in returned)
++    assert at.button(key="prepare").disabled

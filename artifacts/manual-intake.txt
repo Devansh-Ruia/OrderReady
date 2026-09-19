@@ -1,0 +1,21 @@
+INTAKE TICKET
+==================================
+Customer : Jordan Rivera
+Contact  : jordan@example.com
+Garment  : Heavyweight cotton tee
+Print    : Front centre
+Deadline : 2026-10-15
+
+Sizes
+  S x 10
+  M x 10
+  L x 5
+
+TOTAL    : 25 shirts
+
+Reviewed by founder: yes
+
+Original inquiry:
+Jordan Rivera, jordan@example.com. Please print crew-neck T-shirts with a front print. S 10, M 10, L 5. Needed by 2026-10-15.
+
+Intake only — no pricing or artwork review.

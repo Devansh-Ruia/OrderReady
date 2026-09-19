@@ -1,0 +1,1084 @@
+diff --git a/app.py b/app.py
+index ab82c81..38bebc5 100644
+--- a/app.py
++++ b/app.py
+@@ -1,439 +1,492 @@
+-"""Run with: python -m streamlit run app.py.
+-
+-Wired to the tested implementation: model.extract_order (evidence gate) and
+-order_logic.validate (deterministic rules). The orderready/ package is left
+-in place as a fallback but is no longer imported.
+-"""
+-
++"""OrderReady intake UI. Run with python -m streamlit run app.py."""
++from copy import deepcopy
++import hashlib
++import inspect
+ import os
+ import re
+ 
+ import streamlit as st
+-
+ import fixtures
++import model
+ from model import FIELDS, extract_order
+-from order_logic import GARMENT, LABEL, PRINT_LOCATION, SIZES, render_ticket, ticket_json, validate
++from order_logic import GARMENT, PRINT_LOCATION, SIZES, render_ticket, ticket_json, validate
++from ui_state import cache_get, cache_put, extraction_key
+ 
+-
+-SERVICE = f"Custom T-shirt printing: {GARMENT.lower()}, sizes S/M/L, {PRINT_LOCATION.lower()} print."
++SERVICE = f"{GARMENT} · Sizes S / M / L · {PRINT_LOCATION} print"
+ NONCOMMITMENT = ("This intake ticket is not a quote, a confirmed order, or a promise "
+                  "that the deadline can be met.")
+-UNAVAILABLE_MESSAGE = "Live AI unavailable — manual intake mode"
++UNAVAILABLE_MESSAGE = "Live AI unavailable. Manual entry is ready."
++FIELD_LABEL = {"customer_name": "Customer name", "contact": "Email or phone",
++               "sizes": "Size quantities", "deadline": "Deadline", "stated_total": "Requested quantity"}
++EDIT_KEYS = ["customer_name", "contact", "size_S", "size_M", "size_L", "deadline", "stated_total"]
+ 
+-# Display label per extracted field. Sizes is ONE field holding a dict.
+-FIELD_LABEL = {
+-    "customer_name": "Customer name",
+-    "contact": "Email or phone",
+-    "sizes": "Size breakdown (S/M/L)",
+-    "deadline": "Deadline (YYYY-MM-DD)",
+-    "stated_total": "Stated total",
+-}
+-# Editor keys: sizes is typed as three boxes but travels as one dict.
+-EDIT_KEYS = ["customer_name", "contact", "size_S", "size_M", "size_L",
+-             "deadline", "stated_total"]
+ 
+-_NUMS = re.compile(r"\d+")
++def empty_extraction():
++    return {"fields": {n: {"value": None, "evidence": None} for n in FIELDS},
++            "ambiguities": [], "dropped": [], "error": None}
++
++
++def live_ai_configured():
++    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+ 
+ 
+-def format_sizes(value) -> str:
+-    """S 10 · M 10 · L 5 — never a raw dict on screen."""
++def format_sizes(value):
+     if not isinstance(value, dict):
+         return str(value)
+-    return " · ".join(f"{size} {value.get(size, 0)}" for size in SIZES)
++    return " · ".join(f"{s} {value.get(s) if value.get(s) is not None else 'unknown'}" for s in SIZES)
+ 
+ 
+-def display_value(name: str, value):
++def display_value(name, value):
+     return format_sizes(value) if name == "sizes" else value
+ 
+ 
+-def empty_extraction() -> dict:
+-    return {"fields": {n: {"value": None, "evidence": None} for n in FIELDS},
+-            "ambiguities": [], "dropped": [], "error": None}
+-
+-
+-def live_ai_configured() -> bool:
+-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
++def readable_extraction(extraction):
++    copied = deepcopy(extraction)
++    field = copied["fields"].get("sizes", {})
++    if field.get("value") is not None:
++        field["value"] = format_sizes(field["value"])
++    return copied
+ 
+ 
+-def _norm(s: str) -> str:
+-    return " ".join(str(s).split()).lower()
++def _norm(text):
++    return " ".join(str(text).split()).lower()
+ 
+ 
+-def _topic(text: str) -> str | None:
+-    """Classify an issue so a block and a question about the same thing can be
+-    recognised as one issue, however the model happened to word it."""
+-    t = _norm(text)
+-    mismatch = any(k in t for k in ("add up", "adds up", "sum", "match", "differ",
+-                                    "disagree", "conflict", "inconsistent", "equal"))
+-    if mismatch and any(k in t for k in ("size", "total", "shirt")):
++def _topic(text):
++    text = _norm(text)
++    if any(k in text for k in ("sum", "add up", "adds up", "match", "conflict", "differ", "disagree")) and any(k in text for k in ("size", "total", "shirt")):
+         return "total_mismatch"
+-    if any(k in t for k in ("deadline", "date", "year", "lead time")):
+-        return "deadline"
+-    if any(k in t for k in ("size", "small", "medium", "large")):
+-        return "sizes"
+-    if any(k in t for k in ("email", "phone", "contact")):
+-        return "contact"
+-    if "name" in t:
+-        return "customer_name"
++    for topic, words in (("deadline", ("deadline", "date", "year")),
++                         ("sizes", ("size", "small", "medium", "large")),
++                         ("contact", ("email", "phone", "contact")),
++                         ("customer_name", ("name",))):
++        if any(word in text for word in words):
++            return topic
+     return None
+ 
+ 
+-def dedupe_questions(blocks: list[str], questions: list[str]) -> list[str]:
+-    """When a block and a question state the same issue — the 30-vs-25 mismatch
+-    being the one that matters — show it once, as the block. Blocks are the
+-    stronger signal, so the question is the one that gets dropped."""
+-    block_norms = {_norm(b) for b in blocks}
+-    block_topics = {t for t in (_topic(b) for b in blocks) if t}
+-    block_numbers = {tuple(sorted(_NUMS.findall(b))) for b in blocks if _NUMS.search(b)}
+-    out, seen = [], set()
+-    for q in questions:
+-        norm = _norm(q)
+-        if norm in block_norms or norm in seen:
+-            continue
+-        topic = _topic(q)
+-        if topic and topic in block_topics:
+-            continue
+-        numbers = tuple(sorted(_NUMS.findall(q)))
+-        if numbers and numbers in block_numbers:
+-            continue
+-        seen.add(norm)
+-        out.append(q)
+-    return out
+-
+-
+-def readable_extraction(extraction: dict) -> dict:
+-    """Display copy of an extraction with sizes formatted, evidence intact."""
+-    fields = {}
+-    for name, field in extraction["fields"].items():
+-        field = dict(field)
+-        if name == "sizes" and field.get("value") is not None:
+-            field["value"] = format_sizes(field["value"])
+-        fields[name] = field
+-    return {**extraction, "fields": fields}
+-
+-
+-def initialize() -> None:
+-    defaults = {
+-        "source_text": "", "mode": None, "draft_source": None, "stale": False,
+-        "reviewed": False, "prepared": None, "history": [],
+-        "active_history": None, "active_issues": [], "issue_generation": 0,
+-        "extraction": empty_extraction(), "extraction_error": None,
+-        "prepare_error": None,
+-    }
++def dedupe_questions(blocks, questions):
++    topics = {_topic(block) for block in blocks} - {None}
++    seen = {_norm(block) for block in blocks}
++    output = []
++    for question in questions:
++        if _norm(question) not in seen and _topic(question) not in topics:
++            output.append(question)
++            seen.add(_norm(question))
++    return output
++
++
++def initialize():
++    defaults = {"source_text": "", "mode": None, "draft_source": None, "stale": False,
++                "reviewed": False, "prepared": None, "history": [], "active_history": None,
++                "active_issues": [], "issue_generation": 0, "issue_resolutions": {},
++                "extraction": empty_extraction(), "extraction_error": None, "prepare_error": None,
++                "pending": None, "source_revision": 0, "request_counter": 0,
++                "extraction_cache": {}, "cache_notice": None, "initial_editor": {},
++                "observed_snapshot": None}
+     for key, value in defaults.items():
+         st.session_state.setdefault(key, value)
+     for key in EDIT_KEYS:
+         st.session_state.setdefault(f"edit_{key}", "")
+ 
+ 
+-def invalidate() -> None:
++def invalidate():
+     st.session_state.reviewed = False
+     st.session_state.prepared = None
+     st.session_state.prepare_error = None
+ 
+ 
+-def source_changed() -> None:
++def source_changed():
+     invalidate()
++    st.session_state.source_revision += 1
++    st.session_state.cache_notice = None
+     if st.session_state.mode is not None:
+         st.session_state.stale = True
+ 
+ 
+-def issue_key(index: int) -> str:
+-    return f"resolved_{st.session_state.issue_generation}_{index}"
++def issue_key(question):
++    digest = hashlib.sha256(str(question).encode()).hexdigest()[:16]
++    return f"resolved_{st.session_state.issue_generation}_{digest}"
+ 
+ 
+-def current_overrides() -> tuple[dict, list[str]]:
+-    """Founder-typed values beat the model. Blank means 'no override'."""
+-    overrides, errors = {}, []
+-    for name in ("customer_name", "contact", "deadline"):
+-        raw = st.session_state[f"edit_{name}"].strip()
+-        if raw:
+-            overrides[name] = raw
++def resolve_issue(key):
++    st.session_state.issue_resolutions[key] = st.session_state.get(key) is True
++    invalidate()
+ 
+-    raw_total = st.session_state["edit_stated_total"].strip()
+-    if raw_total:
++
++def current_overrides():
++    """Every editor is authoritative, including a cleared field."""
++    typed, errors = {}, []
++    for name in ("customer_name", "contact", "deadline"):
++        typed[name] = st.session_state[f"edit_{name}"].strip() or None
++    raw = st.session_state.edit_stated_total.strip()
++    typed["stated_total"] = None
++    if raw:
+         try:
+-            overrides["stated_total"] = int(raw_total)
++            typed["stated_total"] = int(raw)
+         except ValueError:
+-            errors.append(f"{FIELD_LABEL['stated_total']} must be a whole number.")
+-
+-    counts, typed = {}, False
++            errors.append("Requested quantity must be a whole number.")
++    counts = {}
+     for size in SIZES:
+         raw = st.session_state[f"edit_size_{size}"].strip()
+         if not raw:
+             continue
+-        typed = True
+         try:
+             counts[size] = int(raw)
+         except ValueError:
+             errors.append(f"Size {size} must be a whole number.")
+-    if typed and not errors:
+-        overrides["sizes"] = counts
+-    return overrides, errors
++    typed["sizes"] = counts if len(counts) == len(SIZES) else None
++    return typed, errors
++
+ 
++def founder_edits(extraction, typed):
++    return {name: value for name, value in typed.items()
++            if value != extraction["fields"].get(name, {}).get("value")}
+ 
+-def founder_edits(extraction: dict, typed: dict) -> dict:
+-    """Editors are prefilled from the extraction, so a value only counts as a
+-    founder override once it actually differs from what the model proposed."""
+-    edits = {}
++
++def validation_input():
++    typed, errors = current_overrides()
++    copied = deepcopy(st.session_state.extraction)
++    # The public validator ignores None overrides. Clear the copied proposal too.
+     for name, value in typed.items():
+-        extracted = (extraction["fields"].get(name) or {}).get("value")
+-        if name == "sizes" and isinstance(extracted, dict):
+-            if {s: int(extracted.get(s, 0)) for s in SIZES} == {s: int(value.get(s, 0)) for s in SIZES}:
+-                continue
+-        elif extracted is not None and str(extracted) == str(value):
+-            continue
+-        edits[name] = value
+-    return edits
++        if value is None:
++            copied["fields"][name]["value"] = None
++    return copied, founder_edits(st.session_state.extraction, typed), errors
+ 
+ 
+-def snapshot() -> dict:
++def review_status():
++    state = st.session_state
++    copied, overrides, errors = validation_input()
++    result = validate(copied, overrides)
++    questions = dedupe_questions([], result["questions"])
++    unresolved = [q for q in questions if (state.issue_resolutions.get(issue_key(q)) is not True or state.get(issue_key(q), True) is not True)]
++    ready = (state.mode in ("manual", "live_ai") and bool(state.source_text.strip())
++             and state.draft_source == state.source_text and not state.stale
++             and not state.pending and not errors and result["ok"]
++             and not unresolved and state.reviewed is True)
++    return result, errors, questions, unresolved, ready
++
++
++def snapshot():
+     state = st.session_state
+     return {"source_text": state.source_text, "mode": state.mode,
+-            "editor": {key: state[f"edit_{key}"] for key in EDIT_KEYS}}
++            "editor": {key: state[f"edit_{key}"] for key in EDIT_KEYS},
++            "issue_generation": state.issue_generation, "resolutions": dict(state.issue_resolutions)}
+ 
+ 
+-def begin_draft(extraction: dict, mode: str) -> None:
++def begin_draft(extraction, mode):
+     state = st.session_state
+     invalidate()
+     state.mode = mode
+-    state.extraction = extraction
++    state.extraction = deepcopy(extraction)
+     state.draft_source = state.source_text
+     state.stale = False
+     state.issue_generation += 1
++    state.issue_resolutions = {}
+     state.active_issues = list(extraction.get("ambiguities") or [])
+     for key in EDIT_KEYS:
+         state[f"edit_{key}"] = ""
+     for name in FIELDS:
+-        value = (extraction["fields"].get(name) or {}).get("value")
++        value = extraction["fields"].get(name, {}).get("value")
+         if value is None:
+             continue
+         if name == "sizes" and isinstance(value, dict):
+             for size in SIZES:
+-                state[f"edit_size_{size}"] = str(value.get(size, 0))
++                state[f"edit_size_{size}"] = "" if value.get(size) is None else str(value[size])
+         elif name != "sizes":
+             state[f"edit_{name}"] = str(value)
++    state.initial_editor = snapshot()["editor"]
+ 
+ 
+-def start_manual() -> None:
++def has_edits():
+     state = st.session_state
+-    if state.prepared or not state.source_text.strip():
+-        return
+-    # Switching modes for the same inquiry cannot erase known model conflicts.
+-    issues = list(state.active_issues) if state.draft_source == state.source_text else []
+-    blank = empty_extraction()
+-    blank["ambiguities"] = issues
+-    begin_draft(blank, "manual")
+-    state.active_history = None
+-    state.extraction_error = None
++    return state.mode is not None and snapshot()["editor"] != state.initial_editor
+ 
+ 
+-def run_extraction() -> None:
++def start_manual():
+     state = st.session_state
+-    if state.prepared or not state.source_text.strip():
++    if state.prepared or state.pending or not state.source_text.strip():
+         return
+-    invalidate()
+-    source = state.source_text
+-    with st.spinner("Reading the inquiry..."):
+-        extraction = extract_order(source)
+-    state.extraction_error = extraction["error"]
+-    if extraction["error"]:
+-        # Gate produced nothing trustworthy; fall back to manual, keep the app usable.
++    if state.mode is not None and state.draft_source == state.source_text:
++        invalidate()
++        state.mode = "manual"
++        state.stale = False
++    else:
+         begin_draft(empty_extraction(), "manual")
+         state.active_history = None
++    state.extraction_error = None
++    state.cache_notice = None
++
++
++def cache_key(source):
++    fingerprint = hashlib.sha256((model.PROMPT + repr(model.FIELDS) + inspect.getsource(model._call)).encode()).hexdigest()
++    return extraction_key(source, model.API_URL, model.MODEL,
++                          {"max_tokens": 1000, "timeout": 20}, fingerprint)
++
++
++def run_extraction(fresh=False, replace=False):
++    """Callbacks only enqueue. Rendering owns the one request."""
++    state = st.session_state
++    if state.prepared or state.pending or not state.source_text.strip() or not live_ai_configured():
+         return
+-    state.history.append({"source_text": source, "extraction": extraction})
+-    begin_draft(extraction, "live_ai")
+-    state.active_history = len(state.history) - 1
++    if has_edits() and not replace:
++        return
++    invalidate()
++    state.request_counter += 1
++    state.pending = {"id": state.request_counter, "source": state.source_text,
++                     "revision": state.source_revision, "fresh": fresh, "key": cache_key(state.source_text)}
++    state.cache_notice = None
++    state.extraction_error = None
++
+ 
++def safe_failure(error):
++    text = str(error).lower()
++    if re.search(r"http\s+40[13]\b", text):
++        return "The AI service rejected its credentials. Use manual entry or check configuration."
++    if re.search(r"http\s+429\b", text):
++        return "The AI service is busy or rate limited. Retry later or use manual entry."
++    if "timeout" in text or "timed out" in text:
++        return "The AI request timed out. Retry or use manual entry."
++    if "json" in text:
++        return "The AI response could not be read. Retry or use manual entry."
++    return "The AI request failed. Retry or use manual entry. Your draft has been kept."
+ 
+-def load_sample(samples: list[dict]) -> None:
+-    if st.session_state.prepared:
++
++def consume_pending():
++    state = st.session_state
++    intent = state.pending
++    if not intent or intent.get("consumed"):
++        return
++    intent["consumed"] = True
++    try:
++        proposal = None if intent["fresh"] else cache_get(state.extraction_cache, intent["key"])
++        reused = proposal is not None
++        if proposal is None:
++            proposal = extract_order(intent["source"])
++        if (state.pending is not intent or state.request_counter != intent["id"]
++                or state.source_revision != intent["revision"] or state.source_text != intent["source"]):
++            return
++        if proposal.get("error"):
++            state.extraction_error = safe_failure(proposal["error"])
++            return
++        if not isinstance(proposal.get("fields"), dict) or any(not isinstance(proposal["fields"].get(n), dict) for n in FIELDS):
++            raise ValueError("Malformed proposal")
++        if not reused:
++            cache_put(state.extraction_cache, intent["key"], proposal)
++        state.history.append({"source_text": intent["source"], "extraction": deepcopy(proposal)})
++        begin_draft(proposal, "live_ai")
++        state.active_history = len(state.history) - 1
++        if reused:
++            state.cache_notice = "Reused this session's extraction. No new AI request was made."
++    except Exception as error:
++        if (state.pending is intent and state.request_counter == intent["id"]
++                and state.source_revision == intent["revision"] and state.source_text == intent["source"]):
++            state.extraction_error = safe_failure(error)
++    finally:
++        if state.pending is intent:
++            state.pending = None
++
++
++def load_sample(samples):
++    if st.session_state.prepared or st.session_state.pending:
+         return
+     st.session_state.source_text = samples[st.session_state.sample_choice]["input"]
+     source_changed()
+ 
+ 
+-def acknowledgment_changed() -> None:
++def reset():
++    for key in list(st.session_state):
++        del st.session_state[key]
++    initialize()
++
++
++def acknowledgment_changed():
+     st.session_state.prepared = None
+     st.session_state.prepare_error = None
+ 
+ 
+-def prepare_ticket() -> None:
+-    state = st.session_state
+-    typed, errors = current_overrides()
+-    overrides = founder_edits(state.extraction, typed)
+-    if errors or state.stale or state.draft_source != state.source_text:
++def prepare_ticket():
++    result, _, _, _, ready = review_status()
++    if not ready:
+         invalidate()
+-        state.prepare_error = "Resolve the current intake before preparing a ticket."
++        st.session_state.prepare_error = "Complete the fields and resolve every issue before preparing a ticket."
+         return
+-    result = validate(state.extraction, overrides)
+-    if not result["ok"] or state.reviewed is not True:
+-        state.prepared = None
+-        state.prepare_error = "Complete the fields and human review before preparing a ticket."
+-        return
+-    state.prepared = {"snapshot": snapshot(),
+-                      "ticket": render_ticket(result, state.source_text),
+-                      "json": ticket_json(result, state.source_text)}
+-    state.prepare_error = None
+-
+-
+-def render_evidence(name: str, extraction: dict, overridden: bool) -> None:
+-    """THE DEMO: every value shown next to the verbatim words it came from."""
+-    field = extraction["fields"].get(name) or {}
+-    value, evidence = field.get("value"), field.get("evidence")
+-    if value is not None:
+-        st.markdown(f"**{display_value(name, value)}**")
+-        st.caption(f'Quoted from the inquiry: "{evidence}"' if evidence
+-                   else "Founder-entered — no quote from the inquiry.")
+-    elif evidence:
+-        # Mentioned, but too vague to use. Different from never mentioned.
+-        st.markdown("_Not specific enough_")
+-        st.caption(f'The inquiry only says: "{evidence}"')
+-    else:
+-        st.markdown("_Not stated_")
+-        st.caption("Nothing in the inquiry mentions this.")
+-    if overridden:
+-        st.caption("Overridden by you below.")
++    st.session_state.prepared = {"snapshot": snapshot(),
++                                 "ticket": render_ticket(result, st.session_state.source_text),
++                                 "json": ticket_json(result, st.session_state.source_text)}
+ 
+ 
+-def main() -> None:
+-    st.set_page_config(page_title="OrderReady", page_icon="📋", layout="centered")
++def render_evidence(name):
++    field = st.session_state.extraction["fields"].get(name, {})
++    if field.get("evidence"):
++        st.caption("From the inquiry")
++        st.text(field["evidence"])
++    elif st.session_state.mode == "live_ai":
++        st.caption("Not stated in the inquiry")
++
++
++def render_review(locked):
++    state = st.session_state
++    st.header("Review the details")
++    if state.mode is None:
++        st.info("Paste an inquiry, then extract it or start manual entry.")
++        st.caption("Customer details, quantities and deadline will appear here.")
++        return
++    st.caption("Manual entry" if state.mode == "manual" else "AI proposal awaiting your review")
++    if state.stale:
++        st.error("The inquiry changed. Extract it again or start manual entry for the current inquiry.")
++    st.text_input("Customer name", key="edit_customer_name", disabled=locked, on_change=invalidate)
++    render_evidence("customer_name")
++    st.text_input("Email or phone", key="edit_contact", disabled=locked, on_change=invalidate)
++    render_evidence("contact")
++    sizes_label, size_help = st.columns([3, 1])
++    sizes_label.markdown("**Size quantities**")
++    with size_help.popover("Size help"):
++        st.write("Enter every size. Use 0 when none are needed. A blank quantity stays unknown.")
++    for size, column in zip(SIZES, st.columns(3)):
++        column.text_input(f"Size {size}", key=f"edit_size_{size}", disabled=locked, on_change=invalidate)
++    render_evidence("sizes")
++    total, deadline = st.columns(2)
++    total.text_input("Requested quantity", key="edit_stated_total", placeholder="Unknown", disabled=locked, on_change=invalidate)
++    deadline.text_input("Deadline", key="edit_deadline", placeholder="YYYY-MM-DD", disabled=locked, on_change=invalidate)
++    with st.popover("Quantity and deadline help"):
++        st.write("Requested quantity is optional. Leave it blank if the customer did not give a total. A deadline needs a complete date including the year and at least seven days of lead time.")
++    render_evidence("stated_total")
++    render_evidence("deadline")
++    result, errors, questions, unresolved, _ = review_status()
++    requested = result["fields"]["stated_total"]["value"]
++    one, two = st.columns(2)
++    one.metric("Requested quantity", "Unknown" if requested is None else requested)
++    two.metric("Supplied size sum", "Unknown" if result["total"] is None else result["total"])
++    missing = list(result["missing"])
++    missing_sizes = [s for s in SIZES if not state[f"edit_size_{s}"].strip()]
++    if missing_sizes:
++        st.caption("Enter a quantity for " + ", ".join(missing_sizes) + ". Use 0 when none are needed.")
++    st.caption(f"{len(missing)} missing fields · {len(unresolved)} unresolved issues")
++    for error in errors + result["blocks"]:
++        st.error(error.replace(" — ", ". "))
++    if missing:
++        st.warning("Still needed · " + ", ".join(missing))
++    for question in dedupe_questions(result["blocks"], questions):
++        key = issue_key(question)
++        state[key] = state.issue_resolutions.get(key, False)
++        st.checkbox("Resolved · " + question, key=key, disabled=locked, on_change=resolve_issue, args=(key,))
++    st.checkbox("I reviewed all fields and resolved the issues.", key="reviewed",
++                disabled=locked or state.stale, on_change=acknowledgment_changed)
++
++
++def main():
++    st.set_page_config(page_title="OrderReady | Checked intake tickets", page_icon="📋", layout="wide")
+     initialize()
+     state = st.session_state
+-
+-    # Defend against changed state even when no widget callback ran.
+     if state.mode is not None and state.source_text != state.draft_source:
+         state.stale = True
+         invalidate()
+-
+-    typed, parse_errors = current_overrides()
+-    overrides = founder_edits(state.extraction, typed)
+-    result = validate(state.extraction, overrides)
+-    if state.prepared and (state.prepared["snapshot"] != snapshot()
+-                           or state.reviewed is not True or state.stale
+-                           or parse_errors or not result["ok"]):
++    if state.observed_snapshot is not None and state.observed_snapshot != snapshot():
++        invalidate()
++    result, errors, _, _, ready = review_status()
++    if state.prepared and (state.prepared["snapshot"] != snapshot() or not ready):
+         invalidate()
+     locked = state.prepared is not None
+-
+-    st.title("OrderReady")
+-    st.write("Turn a customer message into a checked intake ticket.")
+-    st.info(f"Demonstration service: {SERVICE}")
+-    st.caption("Use synthetic inquiries. Live extraction sends the inquiry to Anthropic. "
+-               "Intake stays in this app session; provider retention is not verified.")
+-
+-    st.header("1. Customer inquiry")
+-    samples = [{"label": case["id"], "input": case["text"]} for case in fixtures.CASES]
+-    if samples:
+-        st.selectbox("Optional sample inquiry", range(len(samples)),
+-                     format_func=lambda i: samples[i]["label"], key="sample_choice",
+-                     disabled=locked, on_change=invalidate)
+-        st.button("Load sample", key="load_sample", on_click=load_sample,
+-                  args=(samples,), disabled=locked)
+-    st.text_area("Customer message", key="source_text", height=150,
+-                 disabled=locked, on_change=source_changed)
+-    configured = live_ai_configured()
+-    if not configured:
+-        st.warning(UNAVAILABLE_MESSAGE)
+-        st.caption("Choose Start manual entry to begin. Live extraction requires ANTHROPIC_API_KEY.")
+-    left, right = st.columns(2)
+-    left.button("Extract with live AI", key="extract", on_click=run_extraction,
+-                disabled=locked or not configured or not state.source_text.strip())
+-    right.button("Start manual entry", key="manual", on_click=start_manual,
+-                 disabled=locked or not state.source_text.strip())
+-    if state.extraction_error:
+-        st.warning(UNAVAILABLE_MESSAGE)
+-        st.caption(state.extraction_error)
+-        st.button("Retry live extraction", key="retry", on_click=run_extraction,
+-                  disabled=locked or not configured or not state.source_text.strip())
+-
+-    st.header("2. Review and correct")
+-    if state.mode is None:
+-        st.info("Paste an inquiry, then explicitly extract it or start manual entry.")
+-    else:
+-        st.write("Intake mode: " + ("Live AI proposal with human review"
+-                                    if state.mode == "live_ai" else "Manual entry"))
+-        if state.stale:
+-            st.error("The inquiry changed. This draft is stale. Extract the current "
+-                     "inquiry or explicitly start manual entry.")
+-
+-        st.caption("Left: what the AI found and the exact words it came from. "
+-                   "Right: your correction, which always wins.")
+-        for name in FIELDS:
+-            st.markdown(f"**{FIELD_LABEL[name]}**")
+-            shown, editor = st.columns(2)
+-            with shown:
+-                render_evidence(name, state.extraction, name in overrides)
+-            with editor:
+-                if name == "sizes":
+-                    for size, column in zip(SIZES, st.columns(len(SIZES))):
+-                        column.text_input(size, key=f"edit_size_{size}",
+-                                          disabled=locked, on_change=invalidate)
++    pending = state.pending is not None
++    st.html("""<style>
++    .st-key-header h1 {font-size:2rem; letter-spacing:-.04em; padding-bottom:0;}
++    .st-key-header p {margin-bottom:0;}
++    .st-key-workspace h2,.st-key-ticket h2 {font-size:1.25rem;}
++    .st-key-inquiry,.st-key-review,.st-key-ticket {background:#fff; border:1px solid #D5CFC4; border-radius:12px; padding:24px;}
++    .st-key-workspace label p {font-size:14px;}
++    .st-key-workspace [data-testid="stCaptionContainer"],.st-key-header [data-testid="stCaptionContainer"] {opacity:1;} .st-key-workspace [data-testid="stCaptionContainer"] p,.st-key-header [data-testid="stCaptionContainer"] p {color:#625C53; opacity:1;}
++    .st-key-workspace [data-testid="stMetricValue"] {font-size:1.5rem;}
++    .st-key-header {margin-bottom:8px;}
++    .st-key-loading .placeholder {height:40px; background:#E9E4DC; border-radius:6px; margin:8px 0 24px;}
++    @media(max-width:640px) {.st-key-inquiry,.st-key-review,.st-key-ticket {padding:16px;}}
++    </style>""")
++    with st.container(key="header"):
++        title, art = st.columns([3, 1])
++        with title:
++            st.title("OrderReady")
++            st.write("Turn a customer inquiry into a checked intake ticket.")
++            st.caption(SERVICE)
++        with art:
++            from intro import render_intro
++            render_intro()
++    with st.container(key="workspace"):
++        inquiry, review = st.columns([1, 1.35], gap="large")
++        with inquiry, st.container(key="inquiry"):
++            st.header("Customer inquiry")
++            st.text_area("Customer message", key="source_text", height=240,
++                         placeholder="Paste the customer's message here", disabled=locked or pending,
++                         on_change=source_changed)
++            configured = live_ai_configured()
++            if not configured:
++                st.warning(UNAVAILABLE_MESSAGE)
++            st.caption("Live extraction sends this message to Anthropic. Review the proposal before using it.")
++            replacing = has_edits()
++            disabled = locked or pending or not configured or not state.source_text.strip()
++            st.button("Replace edits with AI extraction" if replacing else "Extract with AI",
++                      key="extract", type="primary", on_click=run_extraction,
++                      kwargs={"replace": replacing}, disabled=disabled, width="stretch")
++            st.button("Start manual entry", key="manual", on_click=start_manual,
++                      disabled=locked or pending or not state.source_text.strip(), width="stretch")
++            if state.extraction_error:
++                st.error(state.extraction_error)
++                st.button("Retry extraction and replace edits" if replacing else "Retry extraction", key="retry",
++                          on_click=run_extraction, kwargs={"fresh": True, "replace": replacing}, disabled=disabled)
++            if state.cache_notice:
++                st.info(state.cache_notice)
++            with st.expander("Samples and extraction options"):
++                samples = [{"label": case["id"], "input": case["text"]} for case in fixtures.CASES]
++                st.selectbox("Sample inquiry", range(len(samples)), format_func=lambda i: samples[i]["label"],
++                             key="sample_choice", disabled=locked or pending, on_change=invalidate)
++                st.button("Load sample", key="load_sample", on_click=load_sample, args=(samples,), disabled=locked or pending)
++                st.button("Replace edits with fresh extraction" if replacing else "Fresh extraction",
++                          key="fresh", on_click=run_extraction, kwargs={"fresh": True, "replace": replacing}, disabled=disabled)
++                st.caption("Fresh extraction makes a new AI request. Successful proposals are reused for 15 minutes in this session.")
++            st.button("Reset intake", key="reset", on_click=reset, disabled=pending)
++        with review, st.container(key="review"):
++            if pending:
++                st.header("Reading the inquiry.")
++                st.caption("Your existing draft is kept until a new proposal is ready.")
++                with st.container(key="loading"):
++                    st.html('<div role="status" aria-label="Reading the inquiry"><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div><div class="placeholder"></div></div>')
++            else:
++                render_review(locked)
++        if not pending:
++            with st.container(key="ticket"):
++                st.header("Intake ticket")
++                if locked:
++                    st.success("Ready for intake")
++                    st.code(state.prepared["ticket"], language=None, wrap_lines=True)
++                    st.download_button("Download intake ticket", state.prepared["ticket"], file_name="orderready-intake.txt",
++                                       mime="text/plain", key="download", on_click="ignore")
++                    st.button("Edit intake", key="edit_intake", on_click=invalidate)
++                    with st.expander("Ticket as JSON"):
++                        st.json(state.prepared["json"])
+                 else:
+-                    st.text_input("Correction", key=f"edit_{name}", disabled=locked,
+-                                  on_change=invalidate, label_visibility="collapsed")
+-            st.divider()
+-
+-        for error in parse_errors:
+-            st.error(error)
+-        for block in result["blocks"]:
+-            st.error(block)
+-        for label in result["missing"]:
+-            st.warning(f"Still needed: {label}")
+-
+-        if result["total"] is not None:
+-            st.metric("Computed S/M/L total", result["total"])
+-        else:
+-            st.caption("The size total appears once the size breakdown is valid. "
+-                       "Unknown is different from 0.")
+-
+-        questions = dedupe_questions(result["blocks"], result["questions"])
+-        if questions:
+-            st.write("Ask the customer before committing:")
+-            for index, question in enumerate(questions):
+-                st.checkbox(f"I resolved: {question}", key=issue_key(index),
+-                            disabled=locked, on_change=invalidate)
+-        st.checkbox("I reviewed this inquiry, confirmed all fields and resolved all conflicts.",
+-                    key="reviewed", disabled=locked or state.stale,
+-                    on_change=acknowledgment_changed)
+-
+-    for index, original in enumerate(state.history):
+-        is_current = (index == state.active_history and not state.stale
+-                      and original["source_text"] == state.source_text)
+-        label = ("Original AI proposal for this inquiry" if is_current
+-                 else "Earlier extraction (historical comparison only)")
+-        with st.expander(f"{label} #{index + 1}"):
+-            st.write("Inquiry used for this extraction:")
+-            st.text(original["source_text"])
+-            st.json(readable_extraction(original["extraction"]))
+-
+-    st.header("3. Intake ticket")
+-    unresolved = [index for index in range(len(dedupe_questions(result["blocks"], result["questions"])))
+-                  if st.session_state.get(issue_key(index)) is not True]
+-    if locked:
+-        st.success("Ready for intake")
+-        st.code(state.prepared["ticket"], language=None, wrap_lines=True)
+-        st.download_button("Download intake ticket", state.prepared["ticket"],
+-                           file_name="orderready-intake.txt", mime="text/plain",
+-                           key="download", on_click="ignore")
+-        with st.expander("Ticket as JSON"):
+-            st.json(state.prepared["json"])
+-        st.button("Edit intake", key="edit_intake", on_click=invalidate)
+-    else:
+-        if result["blocks"] or parse_errors:
+-            st.error("Needs correction")
+-        else:
+-            st.info("Needs information")
+-        if state.mode is not None and result["ok"] and not state.stale:
+-            st.caption("Acknowledge your review, then prepare the intake ticket.")
+-        # Export is gated on validate() ok=True. Nothing else unlocks it.
+-        st.button("Prepare intake ticket", key="prepare", on_click=prepare_ticket,
+-                  disabled=(state.mode is None or not result["ok"] or state.stale
+-                            or bool(parse_errors) or state.reviewed is not True
+-                            or bool(unresolved)))
+-        if state.prepare_error:
+-            st.error(state.prepare_error)
+-    st.caption(NONCOMMITMENT)
++                    st.caption("Review the details and acknowledge your checks to prepare the ticket.")
++                    st.button("Prepare intake ticket", key="prepare", on_click=prepare_ticket,
++                              type="primary", disabled=not review_status()[-1])
++                    if state.prepare_error:
++                        st.error(state.prepare_error)
++                st.caption(NONCOMMITMENT)
++    with st.expander("Configuration and technical details"):
++        st.write("AI provider is Anthropic. Live extraction requires ANTHROPIC_API_KEY.")
++        st.write("Use synthetic inquiries. Intake stays in this app session. Provider retention is not verified.")
++        st.caption("Unknown totals remain unknown. Every size requires an explicit quantity.")
++    if state.history:
++        with st.expander("Extraction history"):
++            for index, entry in enumerate(state.history):
++                st.write(f"Original proposal {index + 1}")
++                st.text(entry["source_text"])
++                st.json(readable_extraction(entry["extraction"]))
++    if pending:
++        # Detach omitted editor widget values before Streamlit's widget cleanup.
++        for key in EDIT_KEYS:
++            state[f"edit_{key}"] = state[f"edit_{key}"]
++        consume_pending()
++        state.observed_snapshot = snapshot()
++        st.rerun()
++    state.observed_snapshot = snapshot()
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/tests/test_unit.py b/tests/test_unit.py
+index 61c8d56..858cf5e 100644
+--- a/tests/test_unit.py
++++ b/tests/test_unit.py
+@@ -1,4 +1,4 @@
+-"""Offline domain, HTTP boundary, and Streamlit workflow tests."""
++"""Offline domain and HTTP boundary tests. Active UI coverage is in test_frontend."""
+ 
+ import json
+ from io import BytesIO
+@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, Mock
+ 
+ import pytest
+ from pydantic import ValidationError
+-from streamlit.testing.v1 import AppTest
+ 
+ from orderready import extraction, samples
+ from orderready.export import NONCOMMITMENT, SERVICE, build_ticket
+@@ -18,7 +17,6 @@ from orderready.models import ExtractionResult, OrderDraft
+ from orderready.validation import QUANTITY_FIELDS, computed_total, parse_quantity, validate_order
+ 
+ 
+-APP = Path(__file__).resolve().parents[1] / "app.py"
+ CONTRADICTION = "Thirty shirts. Ten small, ten medium, five large. Needed September 28."
+ INQUIRY_B = "Blue shirts: 25 total, 10 small, 10 medium, 5 large, needed 2026-10-28."
+ 
+@@ -74,37 +72,6 @@ def fake_transport(monkeypatch, *, draft=None, failure=None):
+     return constructor, client
+ 
+ 
+-def new_app():
+-    at = AppTest.from_file(str(APP), default_timeout=10).run()
+-    assert not at.exception
+-    return at
+-
+-
+-def begin_manual(at, source=INQUIRY_B):
+-    at.text_area(key="source_text").set_value(source).run()
+-    at.button(key="manual").click().run()
+-    assert not at.exception
+-    return at
+-
+-
+-def fill_fields(at, **overrides):
+-    values = dict(color="blue", requested_total="25", size_s="10", size_m="10", size_l="5",
+-                  deadline_raw="2026-10-28", deadline_iso="2026-10-28")
+-    values.update(overrides)
+-    for field, value in values.items():
+-        at.text_input(key=f"edit_{field}").set_value(value)
+-    at.run()
+-    assert not at.exception
+-
+-
+-def acknowledge_and_prepare(at):
+-    at.checkbox(key="reviewed").check().run()
+-    assert not at.button(key="prepare").disabled
+-    at.button(key="prepare").click().run()
+-    assert not at.exception
+-    assert len(at.download_button) == 1
+-
+-
+ def test_contract_defaults_extras_and_business_rules_are_separate():
+     first, second = OrderDraft(), OrderDraft()
+     first.unresolved_issues.append("An issue")
+@@ -238,12 +205,6 @@ def test_broken_optional_configuration_keeps_manual_intake_usable(monkeypatch, o
+     monkeypatch.setattr(extraction, "load_dotenv", Mock(side_effect=failure))
+     result = extraction.extract_inquiry(INQUIRY_B)
+     assert result.status == "unavailable" and result.message == extraction.UNAVAILABLE_MESSAGE
+-    at = new_app()
+-    assert extraction.UNAVAILABLE_MESSAGE in [item.value for item in at.warning]
+-    begin_manual(at)
+-    fill_fields(at)
+-    acknowledge_and_prepare(at)
+-    assert "Mode: manual" in at.session_state.prepared["ticket"]
+     offline.assert_not_called()
+ 
+ 
+@@ -420,178 +381,6 @@ def test_real_http_transport_never_redirects_or_retries(monkeypatch, code):
+     assert requests[0].full_url == "https://api.anthropic.com/v1/messages"
+ 
+ 
+-def test_app_requires_explicit_manual_start_and_blank_fields(offline):
+-    at = new_app()
+-    assert extraction.UNAVAILABLE_MESSAGE in [warning.value for warning in at.warning]
+-    assert at.session_state.mode is None and len(at.text_input) == 0
+-    at.text_area(key="source_text").set_value(INQUIRY_B).run()
+-    assert at.session_state.mode is None
+-    at.button(key="manual").click().run()
+-    assert at.session_state.mode == "manual"
+-    assert all(widget.value == "" for widget in at.text_input)
+-    assert at.button(key="prepare").disabled
+-    assert "Needs information" in [item.value for item in at.info]
+-    offline.assert_not_called()
+-
+-
+-def test_app_edit_persistence_and_malformed_values(offline):
+-    at = begin_manual(new_app())
+-    fill_fields(at, size_m="1.5")
+-    at.run()
+-    assert at.text_input(key="edit_size_m").value == "1.5"
+-    assert at.text_input(key="edit_color").value == "blue"
+-    assert not at.metric and not at.download_button
+-    assert "Needs correction" in [item.value for item in at.error]
+-    assert any("whole number" in item.value for item in at.error)
+-    at.text_input(key="edit_size_m").set_value("10").run()
+-    assert at.metric[0].value == "25"
+-    assert at.button(key="prepare").disabled
+-    at.checkbox(key="reviewed").check().run()
+-    at.text_input(key="edit_color").set_value("navy").run()
+-    assert at.checkbox(key="reviewed").value is False
+-    offline.assert_not_called()
+-
+-
+-def test_app_preparation_freezes_controls_and_download_has_no_requests(monkeypatch, valid):
+-    _, client = fake_transport(monkeypatch, draft=valid)
+-    at = new_app()
+-    at.text_area(key="source_text").set_value(INQUIRY_B).run()
+-    at.button(key="extract").click().run()
+-    assert client.open.call_count == 1
+-    at.run()
+-    at.checkbox(key="reviewed").check().run()
+-    assert client.open.call_count == 1
+-    at.button(key="prepare").click().run()
+-    assert not at.exception
+-    assert all(widget.disabled for widget in at.text_input)
+-    assert at.text_area(key="source_text").disabled
+-    assert at.checkbox(key="reviewed").disabled
+-    assert at.button(key="extract").disabled and at.button(key="manual").disabled
+-    ticket = at.session_state.prepared["ticket"]
+-    assert "Mode: live_ai" in ticket
+-    at.download_button(key="download").click().run()
+-    assert at.session_state.prepared["ticket"] == ticket
+-    assert client.open.call_count == 1
+-    at.button(key="edit_intake").click().run()
+-    assert not at.download_button
+-    assert not at.checkbox(key="reviewed").value
+-    assert not at.text_area(key="source_text").disabled
+-    assert at.text_input(key="edit_size_s").value == "10"
+-
+-
+-def test_app_contradiction_needs_deliberate_correction_and_each_issue_resolved(monkeypatch, contradiction):
+-    _, client = fake_transport(monkeypatch, draft=contradiction)
+-    at = new_app()
+-    at.text_area(key="source_text").set_value(CONTRADICTION).run()
+-    at.button(key="extract").click().run()
+-    assert at.text_input(key="edit_requested_total").value == "30"
+-    assert [at.text_input(key=f"edit_size_{size}").value for size in "sml"] == ["10", "10", "5"]
+-    assert at.metric[0].value == "25"
+-    assert at.text_input(key="edit_deadline_raw").value == "September 28"
+-    assert at.text_input(key="edit_deadline_iso").value == ""
+-    assert at.button(key="prepare").disabled and not at.download_button
+-    original = at.session_state.history[0]["draft"].copy()
+-    fill_fields(at, deadline_raw="September 28", deadline_iso="2026-09-28")
+-    assert len(at.session_state.active_issues) == 2
+-    at.checkbox(key="reviewed").check().run()
+-    assert at.button(key="prepare").disabled
+-    at.checkbox(key="resolved_1_0").check().run()
+-    assert not at.checkbox(key="reviewed").value
+-    at.checkbox(key="reviewed").check().run()
+-    assert at.button(key="prepare").disabled
+-    at.checkbox(key="resolved_1_1").check().run()
+-    assert not at.checkbox(key="reviewed").value
+-    acknowledge_and_prepare(at)
+-    assert at.session_state.history[0]["draft"] == original
+-    assert "Requested total: 25" in at.session_state.prepared["ticket"]
+-    assert client.open.call_count == 1
+-
+-
+-def test_source_change_and_failed_extraction_preserve_edits_and_provenance(monkeypatch, valid):
+-    _, client = fake_transport(monkeypatch, draft=valid)
+-    at = new_app()
+-    at.text_area(key="source_text").set_value("Inquiry A").run()
+-    at.button(key="extract").click().run()
+-    at.text_input(key="edit_color").set_value("navy").run()
+-    at.checkbox(key="reviewed").check().run()
+-    at.text_area(key="source_text").set_value(INQUIRY_B).run()
+-    assert at.session_state.stale and not at.session_state.reviewed
+-    assert at.button(key="prepare").disabled
+-    client.open.side_effect = RuntimeError("private request details")
+-    at.button(key="extract").click().run()
+-    assert at.text_input(key="edit_color").value == "navy"
+-    assert at.session_state.mode == "live_ai" and at.session_state.draft_source == "Inquiry A"
+-    assert at.session_state.history[0]["source_text"] == "Inquiry A"
+-    assert at.session_state.stale and not at.session_state.reviewed
+-    assert "Earlier extraction" in at.expander[0].label
+-    assert "Inquiry A" in [item.value for item in at.text]
+-    assert at.button(key="retry")
+-    at.run()
+-    assert client.open.call_count == 2
+-    at.button(key="retry").click().run()
+-    assert client.open.call_count == 3
+-    at.button(key="manual").click().run()
+-    assert at.session_state.mode == "manual" and not at.session_state.stale
+-    assert all(widget.value == "" for widget in at.text_input)
+-    fill_fields(at)
+-    acknowledge_and_prepare(at)
+-    ticket = at.session_state.prepared["ticket"]
+-    assert INQUIRY_B in ticket and "Inquiry A" not in ticket
+-    assert "Mode: manual" in ticket and "Manual entry" in ticket
+-    assert at.session_state.history[0]["source_text"] == "Inquiry A"
+-    assert "Earlier extraction" in at.expander[0].label
+-    assert client.open.call_count == 3
+-
+-
+-def test_switching_to_manual_same_source_keeps_known_issues(monkeypatch, contradiction):
+-    fake_transport(monkeypatch, draft=contradiction)
+-    at = new_app()
+-    at.text_area(key="source_text").set_value(CONTRADICTION).run()
+-    at.button(key="extract").click().run()
+-    at.button(key="manual").click().run()
+-    assert at.session_state.mode == "manual"
+-    assert at.session_state.active_issues == contradiction.unresolved_issues
+-    fill_fields(at)
+-    at.checkbox(key="reviewed").check().run()
+-    assert at.button(key="prepare").disabled
+-
+-
+-@pytest.mark.parametrize("key,value", [("source_text", "changed source"), ("edit_color", "red"),
+-                                       ("mode", "live_ai"), ("reviewed", False)])
+-def test_prepared_snapshot_rejects_state_changes_even_without_callbacks(key, value):
+-    at = begin_manual(new_app())
+-    fill_fields(at)
+-    acknowledge_and_prepare(at)
+-    at.session_state[key] = value
+-    at.run()
+-    assert not at.exception
+-    assert at.session_state.prepared is None and not at.download_button
+-    assert not at.session_state.reviewed
+-
+-
+-def test_sample_loading_uses_only_input_and_requires_explicit_start(monkeypatch):
+-    monkeypatch.setattr(samples, "load_samples", lambda: ([
+-        {"label": "First", "input": CONTRADICTION}, {"label": "Second", "input": INQUIRY_B},
+-    ], None))
+-    at = new_app()
+-    at.selectbox(key="sample_choice").set_value(1).run()
+-    assert at.text_area(key="source_text").value == ""
+-    at.button(key="load_sample").click().run()
+-    assert at.text_area(key="source_text").value == INQUIRY_B
+-    assert at.session_state.mode is None
+-    at.button(key="manual").click().run()
+-    fill_fields(at)
+-    acknowledge_and_prepare(at)
+-    assert at.selectbox(key="sample_choice").disabled
+-    assert at.button(key="load_sample").disabled
+-    at.button(key="edit_intake").click().run()
+-    at.checkbox(key="reviewed").check().run()
+-    at.selectbox(key="sample_choice").set_value(0).run()
+-    assert not at.session_state.reviewed
+-    at.button(key="load_sample").click().run()
+-    assert at.session_state.stale and at.button(key="prepare").disabled
+-
+-
+ @pytest.mark.parametrize("records", ["not JSON", "{}", '[{"label": "x"}]', '[null, 3]', '\ufeff[]'])
+ def test_malformed_sample_fixtures_are_safe(monkeypatch, records):
+     # Mock file reads so tests never persist any inquiry fixture.
+@@ -612,9 +401,3 @@ def test_samples_ignore_expected_outputs(monkeypatch):
+     assert warning is None
+ 
+ 
+-def test_sample_warning_does_not_crash_app(monkeypatch):
+-    monkeypatch.setattr(samples, "load_samples", lambda: ([], "Optional samples could not be loaded."))
+-    at = new_app()
+-    assert any("Optional samples" in item.value for item in at.warning)
+-    begin_manual(at)
+-    assert not at.exception
