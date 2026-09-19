@@ -1,14 +1,14 @@
 """Dev owns this file. Contract: extract_order(text) -> Extraction."""
 import json, os, re, urllib.request, urllib.error
 
-# ---- SWAP POINT: change these three lines for a different provider -------
+# ---- Provider config ----------------------------------------------------
 API_URL = "https://api.anthropic.com/v1/messages"
 HEADERS = {
     "content-type": "application/json",
     "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
     "anthropic-version": "2023-06-01",
 }
-MODEL = "claude-sonnet-5"
+MODEL = os.environ.get("MODEL_ID", "claude-sonnet-5")
 # -------------------------------------------------------------------------
 
 FIELDS = ["customer_name", "contact", "sizes", "deadline", "stated_total"]
@@ -42,19 +42,25 @@ Inquiry:
 {inquiry}
 ---"""
 
-VAGUE_QTY = re.compile(r"\b(about|around|roughly|approx\w*|~|\d+\s*ish)\b", re.I)
+VAGUE_QTY = re.compile(r"(\b(about|around|roughly|approx\w*|\d+\s*ish)\b|~)", re.I)
 
 
 def _call(text, timeout=20):
-    body = json.dumps({
+    payload = {
         "model": MODEL,
         "max_tokens": 1000,
         "messages": [{"role": "user", "content": PROMPT.replace("{inquiry}", text)}],
-    }).encode()
-    req = urllib.request.Request(API_URL, data=body, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.loads(r.read())
-    return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+    }
+    req = urllib.request.Request(API_URL, data=json.dumps(payload).encode(),
+                                 headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        # surface the provider's real message instead of a bare 400
+        raise RuntimeError(f"HTTP {e.code}: {e.read().decode()[:300]}") from None
+    return "".join(b.get("text", "") for b in data.get("content", [])
+                   if b.get("type") == "text")
 
 
 def _parse(raw):
