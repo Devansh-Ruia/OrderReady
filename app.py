@@ -164,7 +164,7 @@ def main() -> None:
     st.title("OrderReady")
     st.write("Turn a customer message into a checked intake ticket.")
     st.info(f"Demonstration service: {SERVICE}")
-    st.caption("Use synthetic inquiries. Live extraction sends the inquiry to OpenAI. Intake stays in this app session; provider retention is not verified.")
+    st.caption("Use synthetic inquiries. Live extraction sends the inquiry to Anthropic. Intake stays in this app session; provider retention is not verified.")
 
     st.header("1. Customer inquiry")
     samples, samples_warning = load_samples()
@@ -180,7 +180,7 @@ def main() -> None:
     configured = live_ai_configured()
     if not configured:
         st.warning(UNAVAILABLE_MESSAGE)
-        st.caption("Choose Start manual entry to begin. Live extraction requires OPENAI_API_KEY and OPENAI_MODEL.")
+        st.caption("Choose Start manual entry to begin. Live extraction requires ANTHROPIC_API_KEY and MODEL_ID.")
     left, right = st.columns(2)
     left.button("Extract with live AI", key="extract", on_click=run_extraction,
                 disabled=locked or not configured or not state.source_text.strip())

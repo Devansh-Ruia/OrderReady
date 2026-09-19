@@ -1,10 +1,11 @@
 """Explicit, single-request extraction. No inquiry logging or persistence."""
 
+import json
 import os
 from pathlib import Path
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from orderready.models import ExtractionResult, OrderDraft
 
@@ -43,12 +44,18 @@ def _configuration() -> tuple[str, str]:
     except (OSError, UnicodeError):
         # A broken optional file must not disable manual intake or usable env values.
         pass
-    return os.getenv("OPENAI_API_KEY", "").strip(), os.getenv("OPENAI_MODEL", "").strip()
+    return os.getenv("ANTHROPIC_API_KEY", "").strip(), os.getenv("MODEL_ID", "").strip()
 
 
 def live_ai_configured() -> bool:
     key, model = _configuration()
     return bool(key and model)
+
+
+class _NoRedirects(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Never forward the API key or make a second request after a redirect.
+        return None
 
 
 def extract_inquiry(text: str) -> ExtractionResult:
@@ -59,30 +66,44 @@ def extract_inquiry(text: str) -> ExtractionResult:
         return ExtractionResult(status="error", message=ERROR_MESSAGE)
 
     try:
-        with OpenAI(api_key=key, timeout=30.0, max_retries=0) as client:
-            parse = getattr(getattr(client, "responses", None), "parse", None)
-            if not callable(parse):
-                return ExtractionResult(status="unavailable", message=UNAVAILABLE_MESSAGE)
-            response = parse(
-                model=model,
-                instructions=INSTRUCTIONS,
-                input=[{"role": "user", "content": text}],
-                text_format=OrderDraft,
-                store=False,
-            )
-            if response.status != "completed" or response.error is not None or response.incomplete_details is not None:
+        schema = OrderDraft.model_json_schema()
+        # Require explicit nulls at the wire boundary, preserving public defaults.
+        schema["required"] = list(OrderDraft.model_fields)
+        payload = {
+            "model": model,
+            "max_tokens": 2048,
+            "system": INSTRUCTIONS,
+            "messages": [{"role": "user", "content": text}],
+            "output_config": {"format": {"type": "json_schema", "schema": schema}},
+        }
+        request = Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+                "x-api-key": key,
+            },
+            method="POST",
+        )
+        with build_opener(_NoRedirects()).open(request, timeout=30.0) as response:
+            if response.getcode() != 200:
                 return ExtractionResult(status="error", message=ERROR_MESSAGE)
-            for output in response.output:
-                if output.type == "message":
-                    if output.status != "completed":
-                        return ExtractionResult(status="error", message=ERROR_MESSAGE)
-                    if any(item.type == "refusal" for item in output.content):
-                        return ExtractionResult(status="error", message=ERROR_MESSAGE)
-            if not isinstance(response.output_parsed, OrderDraft):
-                return ExtractionResult(status="error", message=ERROR_MESSAGE)
-            # Revalidate the boundary even if an adapter returned an unchecked instance.
-            draft = OrderDraft.model_validate(response.output_parsed.model_dump())
-            return ExtractionResult(status="success", draft=draft, message=SUCCESS_MESSAGE)
+            result = json.loads(response.read())
+        if (not isinstance(result, dict) or result.get("type") != "message"
+                or result.get("role") != "assistant" or result.get("stop_reason") != "end_turn"
+                or result.get("error") is not None):
+            return ExtractionResult(status="error", message=ERROR_MESSAGE)
+        content = result.get("content")
+        if (not isinstance(content, list) or len(content) != 1
+                or not isinstance(content[0], dict) or content[0].get("type") != "text"
+                or not isinstance(content[0].get("text"), str)):
+            return ExtractionResult(status="error", message=ERROR_MESSAGE)
+        values = json.loads(content[0]["text"])
+        if not isinstance(values, dict) or set(values) != set(OrderDraft.model_fields):
+            return ExtractionResult(status="error", message=ERROR_MESSAGE)
+        draft = OrderDraft.model_validate(values)
+        return ExtractionResult(status="success", draft=draft, message=SUCCESS_MESSAGE)
     except Exception:
-        # SDK exceptions can include credentials, request text, or provider bodies.
+        # Transport failures can include credentials, request text, or provider bodies.
         return ExtractionResult(status="error", message=ERROR_MESSAGE)

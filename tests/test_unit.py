@@ -1,13 +1,14 @@
-"""Offline domain, SDK boundary, and Streamlit workflow tests."""
+"""Offline domain, HTTP boundary, and Streamlit workflow tests."""
 
 import json
+from io import BytesIO
 from pathlib import Path
-from types import SimpleNamespace
+from urllib.error import HTTPError, URLError
+from urllib.request import HTTPSHandler, build_opener
+from urllib.response import addinfourl
 from unittest.mock import MagicMock, Mock
 
-import httpx2 as httpx
 import pytest
-from openai import APITimeoutError, AuthenticationError, OpenAI, RateLimitError
 from pydantic import ValidationError
 from streamlit.testing.v1 import AppTest
 
@@ -25,11 +26,11 @@ INQUIRY_B = "Blue shirts: 25 total, 10 small, 10 medium, 5 large, needed 2026-10
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     # Never load credentials or allow a real provider request from any test.
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("MODEL_ID", raising=False)
     monkeypatch.setattr(extraction, "load_dotenv", Mock(return_value=False))
     client = Mock(side_effect=AssertionError("Unexpected provider client"))
-    monkeypatch.setattr(extraction, "OpenAI", client)
+    monkeypatch.setattr(extraction, "build_opener", client)
     monkeypatch.setattr(samples, "load_samples", lambda: ([], None))
     return client
 
@@ -50,20 +51,25 @@ def contradiction():
 
 
 def response_for(draft):
-    return SimpleNamespace(status="completed", error=None, incomplete_details=None,
-                           output=[SimpleNamespace(type="message", status="completed", content=[])],
-                           output_parsed=draft)
+    return {
+        "id": "msg_offline", "type": "message", "role": "assistant",
+        "model": "explicit-test-model", "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": draft.model_dump_json()}],
+    }
 
 
-def fake_sdk(monkeypatch, *, draft=None, failure=None):
-    monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
-    monkeypatch.setenv("OPENAI_MODEL", "explicit-test-model")
-    client = MagicMock()
-    client.__enter__.return_value = client
-    client.responses.parse.return_value = response_for(draft if draft is not None else OrderDraft())
-    client.responses.parse.side_effect = failure
+def fake_transport(monkeypatch, *, draft=None, failure=None):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "offline-test-key")
+    monkeypatch.setenv("MODEL_ID", "explicit-test-model")
+    response = MagicMock()
+    response.__enter__.return_value = response
+    response.getcode.return_value = 200
+    response.read.return_value = json.dumps(response_for(draft if draft is not None else OrderDraft())).encode()
+    client = Mock()
+    client.open.return_value = response
+    client.open.side_effect = failure
     constructor = Mock(return_value=client)
-    monkeypatch.setattr(extraction, "OpenAI", constructor)
+    monkeypatch.setattr(extraction, "build_opener", constructor)
     return constructor, client
 
 
@@ -208,8 +214,8 @@ def test_ticket_contents(valid, mode):
 
 @pytest.mark.parametrize("key,model", [("", ""), ("key", ""), ("", "model"), (" ", "model")])
 def test_missing_configuration_is_unavailable_without_client(monkeypatch, offline, key, model):
-    monkeypatch.setenv("OPENAI_API_KEY", key)
-    monkeypatch.setenv("OPENAI_MODEL", model)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", key)
+    monkeypatch.setenv("MODEL_ID", model)
     result = extraction.extract_inquiry(INQUIRY_B)
     assert result.status == "unavailable" and result.draft is None
     assert result.message == extraction.UNAVAILABLE_MESSAGE
@@ -219,8 +225,8 @@ def test_missing_configuration_is_unavailable_without_client(monkeypatch, offlin
 
 
 def test_configuration_respects_explicit_environment(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", " existing-key ")
-    monkeypatch.setenv("OPENAI_MODEL", " chosen-model ")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", " existing-key ")
+    monkeypatch.setenv("MODEL_ID", " chosen-model ")
     assert extraction._configuration() == ("existing-key", "chosen-model")
     assert extraction.load_dotenv.call_args.kwargs["override"] is False
 
@@ -241,68 +247,96 @@ def test_broken_optional_configuration_keeps_manual_intake_usable(monkeypatch, o
 
 
 def test_broken_optional_configuration_preserves_process_environment(monkeypatch, valid):
-    _, client = fake_sdk(monkeypatch, draft=valid)
+    _, client = fake_transport(monkeypatch, draft=valid)
     monkeypatch.setattr(extraction, "load_dotenv", Mock(side_effect=OSError("private path")))
     assert extraction.live_ai_configured()
     assert extraction.extract_inquiry(INQUIRY_B).status == "success"
-    client.responses.parse.assert_called_once()
+    client.open.assert_called_once()
 
 
-def test_missing_parsing_capability_is_unavailable(monkeypatch):
-    _, client = fake_sdk(monkeypatch)
-    client.responses.parse = None
+def test_old_provider_configuration_does_not_enable_live_ai(monkeypatch, offline):
+    monkeypatch.setenv("OPENAI_API_KEY", "offline-old-provider-key")
+    monkeypatch.setenv("OPENAI_MODEL", "old-model")
+    assert not extraction.live_ai_configured()
     assert extraction.extract_inquiry(INQUIRY_B).status == "unavailable"
+    offline.assert_not_called()
 
 
 def test_blank_inquiry_never_calls_provider(monkeypatch):
-    constructor, _ = fake_sdk(monkeypatch)
+    constructor, _ = fake_transport(monkeypatch)
     assert extraction.extract_inquiry("  ").status == "error"
     constructor.assert_not_called()
 
 
-@pytest.mark.parametrize("kind", ["authentication", "timeout", "rate_limit", "malformed"])
+@pytest.mark.parametrize("kind", ["authentication", "timeout", "rate_limit", "network", "malformed"])
 def test_extraction_failures_are_safe_and_never_retried(monkeypatch, caplog, capsys, kind):
-    request = httpx.Request("POST", "https://example.test/v1/responses")
     failures = {
-        "authentication": AuthenticationError("sensitive inquiry", response=httpx.Response(401, request=request), body=None),
-        "timeout": APITimeoutError(request=request),
-        "rate_limit": RateLimitError("sensitive inquiry", response=httpx.Response(429, request=request), body=None),
+        "authentication": HTTPError("https://api.anthropic.com/v1/messages", 401, "sensitive inquiry", {}, None),
+        "timeout": TimeoutError("sensitive inquiry"),
+        "rate_limit": HTTPError("https://api.anthropic.com/v1/messages", 429, "sensitive inquiry", {}, None),
+        "network": URLError("sensitive inquiry"),
         "malformed": ValueError("sensitive inquiry"),
     }
-    constructor, client = fake_sdk(monkeypatch, failure=failures[kind])
+    constructor, client = fake_transport(monkeypatch, failure=failures[kind])
     result = extraction.extract_inquiry("sensitive inquiry")
     assert result.status == "error" and result.draft is None
     assert result.message == extraction.ERROR_MESSAGE
-    constructor.assert_called_once_with(api_key="offline-test-key", timeout=30.0, max_retries=0)
-    client.responses.parse.assert_called_once()
-    assert "sensitive inquiry" not in caplog.text + capsys.readouterr().out + result.message
+    constructor.assert_called_once()
+    assert isinstance(constructor.call_args.args[0], extraction._NoRedirects)
+    client.open.assert_called_once()
+    assert client.open.call_args.kwargs == {"timeout": 30.0}
+    captured = capsys.readouterr()
+    assert "sensitive inquiry" not in caplog.text + captured.out + captured.err + result.message
 
 
-@pytest.mark.parametrize("kind", ["refusal", "incomplete", "error", "no_parsed", "wrong_type", "bad_quantity", "broken_envelope"])
+@pytest.mark.parametrize("kind", [
+    "refusal", "incomplete", "error", "no_content", "wrong_type", "bad_quantity", "broken_envelope",
+    "wrong_role", "empty_text", "invalid_json", "missing_field", "extra_field", "bad_content_type", "http_error",
+])
 def test_malformed_or_incomplete_responses_fail_safely(monkeypatch, valid, kind):
-    _, client = fake_sdk(monkeypatch, draft=valid)
-    response = client.responses.parse.return_value
+    _, client = fake_transport(monkeypatch, draft=valid)
+    response = response_for(valid)
     if kind == "refusal":
-        response.output[0].content = [SimpleNamespace(type="refusal")]
+        response["stop_reason"] = "refusal"
     elif kind == "incomplete":
-        response.status = "incomplete"
+        response["stop_reason"] = "max_tokens"
     elif kind == "error":
-        response.error = {"message": "sensitive provider error"}
-    elif kind == "no_parsed":
-        response.output_parsed = None
+        response["error"] = {"message": "sensitive provider error"}
+    elif kind == "no_content":
+        response["content"] = []
     elif kind == "wrong_type":
-        response.output_parsed = {"color": "blue"}
+        response["type"] = "error"
     elif kind == "bad_quantity":
-        response.output_parsed = OrderDraft.model_construct(size_s=True)
+        values = valid.model_dump()
+        values["size_s"] = True
+        response["content"][0]["text"] = json.dumps(values)
+    elif kind == "wrong_role":
+        response["role"] = "user"
+    elif kind == "empty_text":
+        response["content"][0]["text"] = ""
+    elif kind == "invalid_json":
+        response["content"][0]["text"] = "not JSON"
+    elif kind in {"missing_field", "extra_field"}:
+        values = valid.model_dump()
+        if kind == "missing_field":
+            del values["requested_total"]
+        else:
+            values["invented"] = "unrecognized field"
+        response["content"][0]["text"] = json.dumps(values)
+    elif kind == "bad_content_type":
+        response["content"][0]["type"] = "tool_use"
+    elif kind == "http_error":
+        client.open.return_value.getcode.return_value = 500
     else:
-        client.responses.parse.return_value = SimpleNamespace()
+        response = []
+    client.open.return_value.read.return_value = json.dumps(response).encode()
     result = extraction.extract_inquiry(INQUIRY_B)
     assert result.status == "error" and result.message == extraction.ERROR_MESSAGE
-    client.responses.parse.assert_called_once()
+    client.open.assert_called_once()
 
 
 def test_successful_extraction_is_only_a_proposal(monkeypatch, contradiction):
-    constructor, client = fake_sdk(monkeypatch, draft=contradiction)
+    constructor, client = fake_transport(monkeypatch, draft=contradiction)
     result = extraction.extract_inquiry(CONTRADICTION)
     assert result.status == "success"
     assert result.draft == contradiction
@@ -310,55 +344,79 @@ def test_successful_extraction_is_only_a_proposal(monkeypatch, contradiction):
     assert (result.draft.size_s, result.draft.size_m, result.draft.size_l) == (10, 10, 5)
     assert result.draft.deadline_raw == "September 28" and result.draft.deadline_iso is None
     assert validate_order(result.draft)
-    kwargs = client.responses.parse.call_args.kwargs
-    assert kwargs["input"] == [{"role": "user", "content": CONTRADICTION}]
-    assert kwargs["instructions"] == extraction.INSTRUCTIONS
-    assert CONTRADICTION not in kwargs["instructions"]
-    assert kwargs["text_format"] is OrderDraft and kwargs["model"] == "explicit-test-model"
-    assert kwargs["store"] is False
-    assert constructor.call_count == client.responses.parse.call_count == 1
+    request = client.open.call_args.args[0]
+    body = json.loads(request.data)
+    assert body["messages"] == [{"role": "user", "content": CONTRADICTION}]
+    assert body["system"] == extraction.INSTRUCTIONS
+    assert CONTRADICTION not in body["system"]
+    assert body["output_config"]["format"]["type"] == "json_schema"
+    assert body["model"] == "explicit-test-model"
+    assert body["max_tokens"] == 2048
+    assert constructor.call_count == client.open.call_count == 1
 
 
-def test_missing_total_stays_unknown_after_extraction(monkeypatch, valid):
+def test_missing_total_and_explicit_zero_stay_unchanged_after_extraction(monkeypatch, valid):
     valid.requested_total = None
-    fake_sdk(monkeypatch, draft=valid)
-    draft = extraction.extract_inquiry("10 small, 10 medium, 5 large, blue, 2026-10-28").draft
+    valid.size_l = 0
+    fake_transport(monkeypatch, draft=valid)
+    draft = extraction.extract_inquiry("10 small, 10 medium, zero large, blue, 2026-10-28").draft
     assert draft.requested_total is None
-    assert computed_total(draft) == 25
+    assert (draft.size_s, draft.size_m, draft.size_l) == (10, 10, 0)
+    assert computed_total(draft) == 20
     assert validate_order(draft)
 
 
-def test_real_sdk_serialization_and_parsing_use_one_mock_http_request(monkeypatch, contradiction):
-    monkeypatch.setenv("OPENAI_API_KEY", "offline-test-key")
-    monkeypatch.setenv("OPENAI_MODEL", "explicit-test-model")
+def mocked_http_response(request, body, *, code=200, headers=None):
+    response = addinfourl(BytesIO(json.dumps(body).encode()), headers or {}, request.full_url, code=code)
+    response.msg = "Offline response"
+    return response
+
+
+def test_real_http_serialization_and_parsing_use_one_mock_request(monkeypatch, contradiction):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "offline-test-key")
+    monkeypatch.setenv("MODEL_ID", "explicit-test-model")
     requests = []
 
-    def respond(request):
+    def respond(handler, request):
         requests.append(request)
-        return httpx.Response(200, json={
-            "id": "resp_offline", "object": "response", "created_at": 0,
-            "model": "explicit-test-model", "status": "completed", "error": None,
-            "incomplete_details": None, "parallel_tool_calls": False, "tools": [],
-            "tool_choice": "auto", "output": [{
-                "type": "message", "id": "msg_offline", "role": "assistant", "status": "completed",
-                "content": [{"type": "output_text", "text": contradiction.model_dump_json(), "annotations": []}],
-            }],
-        })
+        return mocked_http_response(request, response_for(contradiction))
 
-    def client_factory(**kwargs):
-        return OpenAI(**kwargs, http_client=httpx.Client(transport=httpx.MockTransport(respond)))
-
-    monkeypatch.setattr(extraction, "OpenAI", client_factory)
+    monkeypatch.setattr(HTTPSHandler, "https_open", respond)
+    monkeypatch.setattr(extraction, "build_opener", build_opener)
     result = extraction.extract_inquiry(CONTRADICTION)
     assert result.status == "success" and result.draft == contradiction
     assert len(requests) == 1
-    body = json.loads(requests[0].content)
-    assert body["input"][0]["content"] == CONTRADICTION
-    assert body["text"]["format"]["strict"] is True
-    schema = body["text"]["format"]["schema"]
+    request = requests[0]
+    assert request.full_url == "https://api.anthropic.com/v1/messages"
+    assert request.get_method() == "POST"
+    assert request.get_header("X-api-key") == "offline-test-key"
+    assert request.get_header("Anthropic-version") == "2023-06-01"
+    assert request.get_header("Content-type") == "application/json"
+    body = json.loads(request.data)
+    assert body["messages"][0]["content"] == CONTRADICTION
+    schema = body["output_config"]["format"]["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(OrderDraft.model_fields)
-    assert requests[0].extensions["timeout"]["read"] == 30.0
+    assert request.timeout == 30.0
+
+
+@pytest.mark.parametrize("code", [301, 302, 303, 307, 308, 401, 429, 500])
+def test_real_http_transport_never_redirects_or_retries(monkeypatch, code):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "offline-test-key")
+    monkeypatch.setenv("MODEL_ID", "explicit-test-model")
+    requests = []
+
+    def respond(handler, request):
+        requests.append(request)
+        return mocked_http_response(request, {"error": "private provider body"}, code=code,
+                                    headers={"Location": "https://other-host.invalid/collect"})
+
+    monkeypatch.setattr(HTTPSHandler, "https_open", respond)
+    monkeypatch.setattr(extraction, "build_opener", build_opener)
+    result = extraction.extract_inquiry(INQUIRY_B)
+    assert result.status == "error" and result.message == extraction.ERROR_MESSAGE
+    assert len(requests) == 1
+    assert requests[0].full_url == "https://api.anthropic.com/v1/messages"
 
 
 def test_app_requires_explicit_manual_start_and_blank_fields(offline):
@@ -394,14 +452,14 @@ def test_app_edit_persistence_and_malformed_values(offline):
 
 
 def test_app_preparation_freezes_controls_and_download_has_no_requests(monkeypatch, valid):
-    _, client = fake_sdk(monkeypatch, draft=valid)
+    _, client = fake_transport(monkeypatch, draft=valid)
     at = new_app()
     at.text_area(key="source_text").set_value(INQUIRY_B).run()
     at.button(key="extract").click().run()
-    assert client.responses.parse.call_count == 1
+    assert client.open.call_count == 1
     at.run()
     at.checkbox(key="reviewed").check().run()
-    assert client.responses.parse.call_count == 1
+    assert client.open.call_count == 1
     at.button(key="prepare").click().run()
     assert not at.exception
     assert all(widget.disabled for widget in at.text_input)
@@ -412,7 +470,7 @@ def test_app_preparation_freezes_controls_and_download_has_no_requests(monkeypat
     assert "Mode: live_ai" in ticket
     at.download_button(key="download").click().run()
     assert at.session_state.prepared["ticket"] == ticket
-    assert client.responses.parse.call_count == 1
+    assert client.open.call_count == 1
     at.button(key="edit_intake").click().run()
     assert not at.download_button
     assert not at.checkbox(key="reviewed").value
@@ -421,7 +479,7 @@ def test_app_preparation_freezes_controls_and_download_has_no_requests(monkeypat
 
 
 def test_app_contradiction_needs_deliberate_correction_and_each_issue_resolved(monkeypatch, contradiction):
-    _, client = fake_sdk(monkeypatch, draft=contradiction)
+    _, client = fake_transport(monkeypatch, draft=contradiction)
     at = new_app()
     at.text_area(key="source_text").set_value(CONTRADICTION).run()
     at.button(key="extract").click().run()
@@ -445,11 +503,11 @@ def test_app_contradiction_needs_deliberate_correction_and_each_issue_resolved(m
     acknowledge_and_prepare(at)
     assert at.session_state.history[0]["draft"] == original
     assert "Requested total: 25" in at.session_state.prepared["ticket"]
-    assert client.responses.parse.call_count == 1
+    assert client.open.call_count == 1
 
 
 def test_source_change_and_failed_extraction_preserve_edits_and_provenance(monkeypatch, valid):
-    _, client = fake_sdk(monkeypatch, draft=valid)
+    _, client = fake_transport(monkeypatch, draft=valid)
     at = new_app()
     at.text_area(key="source_text").set_value("Inquiry A").run()
     at.button(key="extract").click().run()
@@ -458,7 +516,7 @@ def test_source_change_and_failed_extraction_preserve_edits_and_provenance(monke
     at.text_area(key="source_text").set_value(INQUIRY_B).run()
     assert at.session_state.stale and not at.session_state.reviewed
     assert at.button(key="prepare").disabled
-    client.responses.parse.side_effect = RuntimeError("private request details")
+    client.open.side_effect = RuntimeError("private request details")
     at.button(key="extract").click().run()
     assert at.text_input(key="edit_color").value == "navy"
     assert at.session_state.mode == "live_ai" and at.session_state.draft_source == "Inquiry A"
@@ -468,9 +526,9 @@ def test_source_change_and_failed_extraction_preserve_edits_and_provenance(monke
     assert "Inquiry A" in [item.value for item in at.text]
     assert at.button(key="retry")
     at.run()
-    assert client.responses.parse.call_count == 2
+    assert client.open.call_count == 2
     at.button(key="retry").click().run()
-    assert client.responses.parse.call_count == 3
+    assert client.open.call_count == 3
     at.button(key="manual").click().run()
     assert at.session_state.mode == "manual" and not at.session_state.stale
     assert all(widget.value == "" for widget in at.text_input)
@@ -481,11 +539,11 @@ def test_source_change_and_failed_extraction_preserve_edits_and_provenance(monke
     assert "Mode: manual" in ticket and "Manual entry" in ticket
     assert at.session_state.history[0]["source_text"] == "Inquiry A"
     assert "Earlier extraction" in at.expander[0].label
-    assert client.responses.parse.call_count == 3
+    assert client.open.call_count == 3
 
 
 def test_switching_to_manual_same_source_keeps_known_issues(monkeypatch, contradiction):
-    fake_sdk(monkeypatch, draft=contradiction)
+    fake_transport(monkeypatch, draft=contradiction)
     at = new_app()
     at.text_area(key="source_text").set_value(CONTRADICTION).run()
     at.button(key="extract").click().run()
