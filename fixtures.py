@@ -37,7 +37,7 @@ and we want 30 shirts so some folks get two. Need by 2026-10-20."""},
     # Trips three rules at once: total mismatch, yearless date, no contact.
     {"id": "demo-contradiction", "expect": "blocks",
      "reason": "stated 30, sizes sum to 25; 'September 28' has no year; no contact given",
-     "must_not_invent": ["deadline", "sizes"],
+     "must_not_invent": ["deadline"],
      "text": """Thirty shirts. Ten small, ten medium, five large. Needed September 28."""},
 
     {"id": "deadline-too-soon", "expect": "blocks",

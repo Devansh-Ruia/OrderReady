@@ -1,6 +1,16 @@
 """Dev owns this file. Contract: extract_order(text) -> Extraction."""
 import json, os, re, urllib.request, urllib.error
 
+# load .env without a dependency (pip is blocked on this Python)
+try:
+    for _line in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+except OSError:
+    pass
+
 # ---- Provider config ----------------------------------------------------
 API_URL = "https://api.anthropic.com/v1/messages"
 HEADERS = {
@@ -73,9 +83,15 @@ def _parse(raw):
     return json.loads(raw[start:end + 1])
 
 
+def _norm(s):
+    """Collapse whitespace runs and lowercase, so a quote that differs only
+    in line breaks still counts as verbatim."""
+    return " ".join(s.split()).lower()
+
+
 def _gate(fields, text):
     """THE EVIDENCE GATE. A value with no verbatim evidence in the source is dropped."""
-    low = text.lower()
+    low = _norm(text)
     dropped = []
     for name in FIELDS:
         f = fields.setdefault(name, {"value": None, "evidence": None})
@@ -83,7 +99,7 @@ def _gate(fields, text):
             fields[name] = {"value": None, "evidence": None}
             continue
         ev = (f.get("evidence") or "").strip()
-        if f.get("value") is not None and (not ev or ev.lower() not in low):
+        if f.get("value") is not None and (not ev or _norm(ev) not in low):
             f["value"] = None
             dropped.append(name)
     # belt and braces: the model sometimes accepts an approximate count anyway
