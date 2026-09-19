@@ -29,6 +29,7 @@ def offline(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("MODEL_ID", raising=False)
     monkeypatch.setattr(extraction, "load_dotenv", Mock(return_value=False))
+    monkeypatch.setattr("urllib.request.urlopen", Mock(side_effect=AssertionError("Unexpected live HTTP request")))
     client = Mock(side_effect=AssertionError("Unexpected provider client"))
     monkeypatch.setattr(extraction, "build_opener", client)
     monkeypatch.setattr(samples, "load_samples", lambda: ([], None))
