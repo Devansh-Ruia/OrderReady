@@ -1,6 +1,16 @@
 """Dev owns this file. Contract: extract_order(text) -> Extraction."""
 import json, os, re, urllib.request, urllib.error
 
+# load .env without a dependency (pip is blocked on this Python)
+try:
+    for _line in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+except OSError:
+    pass
+
 # ---- Provider config ----------------------------------------------------
 API_URL = "https://api.anthropic.com/v1/messages"
 HEADERS = {
