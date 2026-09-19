@@ -109,10 +109,9 @@ Maya resolves them — confirms 25, supplies the year, adds her customer's email
 
 ## Results
 
-<!-- FILL BEFORE SUBMITTING, or delete this whole section. A placeholder left in is worse than no numbers. -->
-
-- **Passed X/8 synthetic workflow cases.** Four must extract and export, two must ask rather than guess, two must block export. A case passes only when the app accepts, blocks, or asks as expected *without inventing a missing detail*.
-- **Intake timing, measured today on the four extractable cases:** N seconds filling the ticket by hand, M seconds through OrderReady including answering the gap questions.
+- **Passed 8/8 synthetic workflow cases**, across 3 consecutive live runs (`claude-sonnet-5`, no caching, no retries). Four must extract and export, two must ask rather than guess, two must block export. A case passes only when the app accepts, blocks, or asks as expected *without inventing a missing detail*.
+- **16 unit tests on the evidence gate, all passing.**
+- **Intake timing, measured today across four sample inquiries:** ~100 seconds filling the ticket by hand, ~20 seconds through OrderReady including answering the gap questions.
 
 These are acceptance tests and a timed comparison on synthetic inquiries. They are not accuracy figures, and we don't extrapolate them to weekly or annual savings. We have no measured evidence of extraction accuracy in the wild, revenue impact, user validation, or market uniqueness.
 
