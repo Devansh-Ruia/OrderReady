@@ -35,6 +35,17 @@ EDIT_KEYS = ["customer_name", "contact", "size_S", "size_M", "size_L",
 _NUMS = re.compile(r"\d+")
 
 
+def format_sizes(value) -> str:
+    """S 10 · M 10 · L 5 — never a raw dict on screen."""
+    if not isinstance(value, dict):
+        return str(value)
+    return " · ".join(f"{size} {value.get(size, 0)}" for size in SIZES)
+
+
+def display_value(name: str, value):
+    return format_sizes(value) if name == "sizes" else value
+
+
 def empty_extraction() -> dict:
     return {"fields": {n: {"value": None, "evidence": None} for n in FIELDS},
             "ambiguities": [], "dropped": [], "error": None}
@@ -88,6 +99,17 @@ def dedupe_questions(blocks: list[str], questions: list[str]) -> list[str]:
         seen.add(norm)
         out.append(q)
     return out
+
+
+def readable_extraction(extraction: dict) -> dict:
+    """Display copy of an extraction with sizes formatted, evidence intact."""
+    fields = {}
+    for name, field in extraction["fields"].items():
+        field = dict(field)
+        if name == "sizes" and field.get("value") is not None:
+            field["value"] = format_sizes(field["value"])
+        fields[name] = field
+    return {**extraction, "fields": fields}
 
 
 def initialize() -> None:
@@ -261,7 +283,7 @@ def render_evidence(name: str, extraction: dict, overridden: bool) -> None:
     field = extraction["fields"].get(name) or {}
     value, evidence = field.get("value"), field.get("evidence")
     if value is not None:
-        st.markdown(f"**{value}**")
+        st.markdown(f"**{display_value(name, value)}**")
         st.caption(f'Quoted from the inquiry: "{evidence}"' if evidence
                    else "Founder-entered — no quote from the inquiry.")
     elif evidence:
@@ -369,8 +391,7 @@ def main() -> None:
         if questions:
             st.write("Ask the customer before committing:")
             for index, question in enumerate(questions):
-                st.text(question)
-                st.checkbox(f"I resolved issue {index + 1}", key=issue_key(index),
+                st.checkbox(f"I resolved: {question}", key=issue_key(index),
                             disabled=locked, on_change=invalidate)
         st.checkbox("I reviewed this inquiry, confirmed all fields and resolved all conflicts.",
                     key="reviewed", disabled=locked or state.stale,
@@ -384,7 +405,7 @@ def main() -> None:
         with st.expander(f"{label} #{index + 1}"):
             st.write("Inquiry used for this extraction:")
             st.text(original["source_text"])
-            st.json(original["extraction"])
+            st.json(readable_extraction(original["extraction"]))
 
     st.header("3. Intake ticket")
     unresolved = [index for index in range(len(dedupe_questions(result["blocks"], result["questions"])))
